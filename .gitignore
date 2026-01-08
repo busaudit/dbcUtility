@@ -10,7 +10,7 @@ build/
 
 tests/
 dbcenv/
-venv/
+.venv/
 
 
 #ignore dbcs

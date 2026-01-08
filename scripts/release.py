@@ -9,22 +9,29 @@ import os
 import sys
 import subprocess
 import shutil
+import re
 from datetime import datetime
+from pathlib import Path
 
 def get_version():
-    """Get current version from CHANGELOG.md"""
+    """Get current version from pyproject.toml"""
     try:
-        with open('CHANGELOG.md', 'r', encoding='utf-8') as f:
-            content = f.read()
-            # Find the latest version
-            lines = content.split('\n')
-            for line in lines:
-                if line.startswith('## [1.') or line.startswith('## [2.') or line.startswith('## [0.'):
-                    version = line.split('[')[1].split(']')[0]
-                    return version
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        pyproject_path = Path(project_root) / "pyproject.toml"
+        
+        if pyproject_path.exists():
+            with open(pyproject_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                # Look for version = "x.y.z" pattern
+                match = re.search(r'version\s*=\s*["\']([^"\']+)["\']', content)
+                if match:
+                    return match.group(1)
+        
+        print(f"Error: pyproject.toml not found at {pyproject_path}")
+        sys.exit(1)
     except Exception as e:
-        print(f"Error reading version: {e}")
-        return "1.0.0"
+        print(f"Error reading version from pyproject.toml: {e}")
+        sys.exit(1)
 
 def build_release():
     """Build the release executable"""
@@ -181,7 +188,7 @@ def main():
     print("1. Test the release executable")
     print("2. Create a GitHub release")
     print("3. Upload the release package")
-    print("4. Update version in CHANGELOG.md for next release")
+    print("4. Update version in pyproject.toml for next release")
 
 if __name__ == "__main__":
     main() 

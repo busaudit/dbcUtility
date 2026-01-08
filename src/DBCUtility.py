@@ -23,7 +23,7 @@ Date: 15, July - 2025
 Description:
     PyQt5 GUI to View and Edit DBC files.
 
-Version: v1.0.0
+Version: Read from pyproject.toml (see get_version() function)
 
 Features:
     1. User can view and edit the DBC file.
@@ -35,6 +35,8 @@ Features:
 
 import sys
 import os
+import re
+from pathlib import Path
 
 from resource_utils import get_resource_path
 
@@ -91,6 +93,37 @@ except ImportError:
 from search_module import UnifiedSearchWidget
 from dbc_editor_ui import DBCEditorWidget
 from home_screen import HomeScreenWidget, RecentFilesManager
+
+def get_version():
+    """Get version from pyproject.toml"""
+    possible_paths = []
+    
+    try:
+        # Try multiple possible locations for pyproject.toml
+        if hasattr(sys, '_MEIPASS'):
+            # PyInstaller: look in _MEIPASS first (where bundled files are)
+            possible_paths.append(Path(sys._MEIPASS) / "pyproject.toml")
+            # Also check next to executable
+            possible_paths.append(Path(sys.executable).parent / "pyproject.toml")
+        else:
+            # Development: look relative to this file
+            possible_paths.append(Path(__file__).parent.parent / "pyproject.toml")
+            # Also try current working directory
+            possible_paths.append(Path.cwd() / "pyproject.toml")
+        
+        for pyproject_path in possible_paths:
+            if pyproject_path.exists():
+                with open(pyproject_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    # Look for version = "x.y.z" pattern
+                    match = re.search(r'version\s*=\s*["\']([^"\']+)["\']', content)
+                    if match:
+                        return f"v{match.group(1)}"
+    except Exception as e:
+        print(f"Could not read version from pyproject.toml: {e}")
+    
+    # Fallback to default version
+    return "v1.0.0"
 
 # Package installation removed for executable compatibility
 # All required packages should be installed during development
@@ -720,7 +753,7 @@ class ConverterWindow(QtWidgets.QWidget):
 
 class MainWindow(QtWidgets.QMainWindow):
     APP_NAME = "CAN DBC Utility"
-    APP_VERSION = "v1.0.0"
+    APP_VERSION = get_version()
     APP_DESCRIPTION = "Open Source tool to view and edit CAN DBC files."
     APP_WEBSITE = "https://DBCUtility.com"
     APP_GITHUB = "https://github.com/abhi-1203/dbcUtility"

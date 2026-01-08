@@ -10,23 +10,29 @@ import subprocess
 import shutil
 import tarfile
 import platform
+import re
 from datetime import datetime
 from pathlib import Path
 
 def get_version():
-    """Get current version from CHANGELOG.md"""
+    """Get current version from pyproject.toml"""
     try:
-        with open('CHANGELOG.md', 'r', encoding='utf-8') as f:
-            content = f.read()
-            # Find the latest version
-            lines = content.split('\n')
-            for line in lines:
-                if line.startswith('## [1.') or line.startswith('## [2.') or line.startswith('## [0.'):
-                    version = line.split('[')[1].split(']')[0]
-                    return version
+        project_root = Path(__file__).parent.parent
+        pyproject_path = project_root / "pyproject.toml"
+        
+        if pyproject_path.exists():
+            with open(pyproject_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                # Look for version = "x.y.z" pattern
+                match = re.search(r'version\s*=\s*["\']([^"\']+)["\']', content)
+                if match:
+                    return match.group(1)
+        
+        print(f"Error: pyproject.toml not found at {pyproject_path}")
+        sys.exit(1)
     except Exception as e:
-        print(f"Error reading version: {e}")
-        return "1.0.0"
+        print(f"Error reading version from pyproject.toml: {e}")
+        sys.exit(1)
 
 def build_linux_release():
     """Build the Linux release"""

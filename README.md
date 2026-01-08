@@ -60,14 +60,24 @@ dbcUtility/
    cd dbcUtility
    ```
 
-2. **Install dependencies**:
+2. **Install UV** (if not already installed):
    ```bash
-   pip install -r requirements.txt
+   # Using pip
+   pip install uv
+   
+   # Or using the standalone installer (recommended)
+   # Visit https://github.com/astral-sh/uv for installation instructions
    ```
 
-3. **Run the application**:
+3. **Install dependencies using UV**:
    ```bash
-   python main.py
+   uv sync
+   ```
+
+4. **Run the application**:
+   ```bash
+   # Using UV
+   uv run dbcUtility
    ```
 
 ### Linux
@@ -85,18 +95,33 @@ dbcUtility/
    ```bash
    git clone <repository-url>
    cd dbcUtility
+   
+   # Using UV (recommended)
+   uv sync
+   uv run python main.py
+   
+   # Or using pip (legacy)
    pip install -r requirements.txt
    python main.py
    ```
 
 4. **Build Linux Distribution** (for distribution):
    ```bash
-   # See docs/LINUX_BUILD_SETUP.md for detailed instructions
+   # Using UV (recommended)
+   uv run python scripts/build_linux.py
+   
+   # Or using regular Python
    python scripts/build_linux.py
+   
+   # See docs/LINUX_BUILD_SETUP.md for detailed instructions
    ```
 
 5. **Create Complete Release**:
    ```bash
+   # Using UV (recommended)
+   uv run python scripts/release_linux.py
+   
+   # Or using regular Python
    python scripts/release_linux.py
    ```
 
@@ -174,6 +199,12 @@ The application provides a tabbed interface with three main sections:
 
 To build the executable for distribution:
 
+**Using UV (recommended):**
+```bash
+uv run python scripts/build_exe.py
+```
+
+**Using regular Python:**
 ```bash
 python scripts/build_exe.py
 ```
@@ -184,8 +215,22 @@ The executable will be created in the `dist/` directory.
 
 To create a complete release package:
 
+**Using UV (recommended):**
 ```bash
+# Windows release
+uv run python scripts/release.py
+
+# Linux release
+uv run python scripts/release_linux.py
+```
+
+**Using regular Python:**
+```bash
+# Windows release
 python scripts/release.py
+
+# Linux release
+python scripts/release_linux.py
 ```
 
 This will:
@@ -194,9 +239,47 @@ This will:
 - Include all necessary documentation
 - Generate release notes
 
-The release package will be created in `release-v{version}/` directory.
+The release package will be created in:
+- Windows: `release-v{version}/` directory
+- Linux: `release-linux-v{version}/` directory
 
 **Note**: Release packages are not included in the git repository. They are created locally and should be uploaded to GitHub releases separately.
+
+#### Complete Release Workflow with UV
+
+Here's a step-by-step guide for creating release packages using UV:
+
+1. **Ensure dependencies are synced:**
+   ```bash
+   uv sync
+   ```
+
+2. **Create Windows Release:**
+   ```bash
+   # This will build the executable and create a complete release package
+   uv run python scripts/release.py
+   ```
+   The release will be in `release-v{version}/` with:
+   - `DBCUtility-v{version}.exe` - The executable
+   - `DBCUtility-v{version}.zip` - Complete package
+   - Documentation files (README.md, LICENSE, CHANGELOG.md)
+   - `RELEASE_NOTES.txt` - Release notes
+
+3. **Create Linux Release:**
+   ```bash
+   # This will build the Linux distribution and create a complete release package
+   uv run python scripts/release_linux.py
+   ```
+   The release will be in `release-linux-v{version}/` with:
+   - `DBCUtility-Linux-{arch}-v{version}/` - Distribution folder
+   - `DBCUtility-Linux-{arch}-v{version}.tar.gz` - Tar package
+   - `DBCUtility-Linux-{arch}-v{version}.AppImage` - AppImage (if appimagetool is available)
+   - Documentation and release notes
+
+4. **Upload to GitHub:**
+   - Create a new release on GitHub
+   - Upload the release packages
+   - Include the release notes from the generated files
 
 ### Testing
 

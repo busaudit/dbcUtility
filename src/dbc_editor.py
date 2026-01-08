@@ -25,6 +25,24 @@ class DBCEditor:
         self._original_data = None
         self._modified_data = None
 
+    def create_new_dbc(self) -> Dict[str, Any]:
+        """
+        Create a new empty DBC file structure.
+        Returns a dict with empty messages list.
+        """
+        try:
+            self.db = cantools.database.Database()
+            self.file_path = None
+            self._original_data = {'messages': []}
+            self._modified_data = {'messages': []}
+            
+            logger.info("Created new empty DBC file")
+            return self._original_data
+            
+        except Exception as e:
+            logger.error(f"Failed to create new DBC: {e}")
+            raise DBCEditorError(f"Failed to create new DBC: {e}")
+
     def load_dbc_file(self, file_path: str) -> Dict[str, Any]:
         """
         Load and parse a DBC file using cantools.
@@ -149,6 +167,56 @@ class DBCEditor:
         if not self._modified_data or idx >= len(self._modified_data['messages']):
             raise DBCEditorError("Invalid message index")
         self._modified_data['messages'][idx] = message
+    
+    def duplicate_message(self, idx: int) -> int:
+        """
+        Duplicate a message at idx and append it to the list.
+        Returns the new message index.
+        """
+        if not self._modified_data or idx < 0 or idx >= len(self._modified_data['messages']):
+            raise DBCEditorError("Invalid message index")
+        original = self._modified_data['messages'][idx]
+        new_message = {
+            'name': original['name'],
+            'frame_id': original['frame_id'],
+            'length': original['length'],
+            'senders': list(original.get('senders', [])),
+            'signals': [dict(sig) for sig in original.get('signals', [])],
+            'comments': original.get('comments', '')
+        }
+        # Ensure unique name by appending "_1", "_2", etc.
+        base_name = original['name']
+        candidate = f"{base_name}_1"
+        suffix = 2
+        existing_names = {m['name'] for m in self._modified_data['messages']}
+        while candidate in existing_names:
+            candidate = f"{base_name}_{suffix}"
+            suffix += 1
+        new_message['name'] = candidate
+        self._modified_data['messages'].append(new_message)
+        return len(self._modified_data['messages']) - 1
+    
+    def move_message_up(self, idx: int) -> int:
+        """
+        Move message at idx up by one position.
+        Returns the new index.
+        """
+        if not self._modified_data or idx <= 0 or idx >= len(self._modified_data['messages']):
+            raise DBCEditorError("Invalid message move operation")
+        msgs = self._modified_data['messages']
+        msgs[idx - 1], msgs[idx] = msgs[idx], msgs[idx - 1]
+        return idx - 1
+    
+    def move_message_down(self, idx: int) -> int:
+        """
+        Move message at idx down by one position.
+        Returns the new index.
+        """
+        if not self._modified_data or idx < 0 or idx >= len(self._modified_data['messages']) - 1:
+            raise DBCEditorError("Invalid message move operation")
+        msgs = self._modified_data['messages']
+        msgs[idx + 1], msgs[idx] = msgs[idx], msgs[idx + 1]
+        return idx + 1
 
     def delete_message(self, idx: int) -> None:
         if not self._modified_data or idx >= len(self._modified_data['messages']):
@@ -168,6 +236,58 @@ class DBCEditor:
             raise DBCEditorError("Invalid signal index")
         self._modified_data['messages'][msg_idx]['signals'][sig_idx] = signal
         logger.info(f"Updated signal '{signal['name']}' in message {msg_idx}")
+    
+    def duplicate_signal(self, msg_idx: int, sig_idx: int) -> int:
+        """
+        Duplicate signal at sig_idx within message msg_idx.
+        Returns the index of the newly created signal.
+        """
+        if not self._modified_data or msg_idx < 0 or msg_idx >= len(self._modified_data['messages']):
+            raise DBCEditorError("Invalid message index")
+        signals = self._modified_data['messages'][msg_idx]['signals']
+        if sig_idx < 0 or sig_idx >= len(signals):
+            raise DBCEditorError("Invalid signal index")
+        original = signals[sig_idx]
+        new_signal = dict(original)
+        # Ensure unique name by appending "_1", "_2", etc.
+        base_name = original['name']
+        candidate = f"{base_name}_1"
+        suffix = 2
+        existing_names = {s['name'] for s in signals}
+        while candidate in existing_names:
+            candidate = f"{base_name}_{suffix}"
+            suffix += 1
+        new_signal['name'] = candidate
+        signals.append(new_signal)
+        return len(signals) - 1
+    
+    def move_signal_up(self, msg_idx: int, sig_idx: int) -> int:
+        """
+        Move signal at sig_idx up within message msg_idx.
+        Returns new signal index.
+        """
+        if (not self._modified_data or
+            msg_idx < 0 or msg_idx >= len(self._modified_data['messages'])):
+            raise DBCEditorError("Invalid message index")
+        signals = self._modified_data['messages'][msg_idx]['signals']
+        if sig_idx <= 0 or sig_idx >= len(signals):
+            raise DBCEditorError("Invalid signal move operation")
+        signals[sig_idx - 1], signals[sig_idx] = signals[sig_idx], signals[sig_idx - 1]
+        return sig_idx - 1
+    
+    def move_signal_down(self, msg_idx: int, sig_idx: int) -> int:
+        """
+        Move signal at sig_idx down within message msg_idx.
+        Returns new signal index.
+        """
+        if (not self._modified_data or
+            msg_idx < 0 or msg_idx >= len(self._modified_data['messages'])):
+            raise DBCEditorError("Invalid message index")
+        signals = self._modified_data['messages'][msg_idx]['signals']
+        if sig_idx < 0 or sig_idx >= len(signals) - 1:
+            raise DBCEditorError("Invalid signal move operation")
+        signals[sig_idx + 1], signals[sig_idx] = signals[sig_idx], signals[sig_idx + 1]
+        return sig_idx + 1
 
     def delete_signal(self, msg_idx: int, sig_idx: int) -> None:
         if not self._modified_data or msg_idx >= len(self._modified_data['messages']):

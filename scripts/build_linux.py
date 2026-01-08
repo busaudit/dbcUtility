@@ -31,6 +31,9 @@ def check_dependencies():
     
     if missing_packages:
         print(f"\nPlease install missing packages:")
+        print("Using UV (recommended):")
+        print(f"  uv sync")
+        print("Or using pip (legacy):")
         for package in missing_packages:
             print(f"  pip install {package}")
         return False

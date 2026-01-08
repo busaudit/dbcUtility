@@ -18,9 +18,16 @@ def check_pyinstaller():
         print("✗ PyInstaller is not installed")
         print("Installing PyInstaller...")
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
-            print("✓ PyInstaller installed successfully")
-            return True
+            # Try UV first, fall back to pip
+            try:
+                subprocess.check_call(["uv", "pip", "install", "pyinstaller"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print("✓ PyInstaller installed successfully using UV")
+                return True
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                # Fall back to pip
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
+                print("✓ PyInstaller installed successfully using pip")
+                return True
         except subprocess.CalledProcessError:
             print("✗ Failed to install PyInstaller")
             return False
@@ -60,12 +67,21 @@ def build_executable():
     if os.path.exists('DBCUtility.spec'):
         cmd = [sys.executable, "-m", "PyInstaller", "DBCUtility.spec"]
     else:
+        # Determine the separator for --add-data based on OS
+        import platform
+        if platform.system() == "Windows":
+            data_sep = ";"
+        else:
+            data_sep = ":"
+        
         cmd = [
             sys.executable, "-m", "PyInstaller",
             "--onefile",
             "--windowed",
+            "--name=DBCUtility",
             "--icon=icons/app_icon.ico",
-            "--add-data=icons;icons",
+            f"--add-data=icons{data_sep}icons",
+            f"--add-data=pyproject.toml{data_sep}.",
             "--paths=src",  # Add src directory to Python path
             "--hidden-import=PyQt5.QtCore",
             "--hidden-import=PyQt5.QtGui",

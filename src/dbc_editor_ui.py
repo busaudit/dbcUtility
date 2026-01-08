@@ -509,21 +509,28 @@ class DBCEditorWidget(QtWidgets.QWidget):
         file_layout = QtWidgets.QHBoxLayout()
         
         self.file_label = QtWidgets.QLabel("No file loaded")
+        self.new_button = QtWidgets.QPushButton("New DBC File")
         self.load_button = QtWidgets.QPushButton("Load DBC File")
         self.save_button = QtWidgets.QPushButton("Save Changes")
         self.save_as_button = QtWidgets.QPushButton("Save As...")
         
         # Set button icons
+        self._set_button_icon(self.new_button, "icons/add.ico")
         self._set_button_icon(self.load_button, "icons/load.ico")
         self._set_button_icon(self.save_button, "icons/save.ico")
         self._set_button_icon(self.save_as_button, "icons/save_as.ico")
         
+        # Style the new button to match the load button (green, enabled)
+        self.new_button.setStyleSheet("background-color: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold;")
+        
+        self.new_button.clicked.connect(self.new_dbc_file)
         self.load_button.clicked.connect(self.load_dbc_file)
         self.save_button.clicked.connect(self.save_changes)
         self.save_as_button.clicked.connect(self.save_as)
         
         file_layout.addWidget(self.file_label)
         file_layout.addStretch()
+        file_layout.addWidget(self.new_button)
         file_layout.addWidget(self.load_button)
         file_layout.addWidget(self.save_button)
         file_layout.addWidget(self.save_as_button)
@@ -546,6 +553,7 @@ class DBCEditorWidget(QtWidgets.QWidget):
         self.add_message_button = QtWidgets.QPushButton("Add Message")
         self.edit_message_button = QtWidgets.QPushButton("Edit Message")
         self.delete_message_button = QtWidgets.QPushButton("Delete Message")
+        self.duplicate_message_button = QtWidgets.QPushButton("Duplicate")
         
         # Set button icons
         self._set_button_icon(self.add_message_button, "icons/add.ico")
@@ -555,18 +563,35 @@ class DBCEditorWidget(QtWidgets.QWidget):
         self.add_message_button.clicked.connect(self.add_message)
         self.edit_message_button.clicked.connect(self.edit_message)
         self.delete_message_button.clicked.connect(self.delete_message)
+        self.duplicate_message_button.clicked.connect(self.duplicate_message)
         
         message_buttons_layout.addWidget(self.add_message_button)
         message_buttons_layout.addWidget(self.edit_message_button)
         message_buttons_layout.addWidget(self.delete_message_button)
+        message_buttons_layout.addWidget(self.duplicate_message_button)
         message_buttons_layout.addStretch()
         
         messages_layout.addLayout(message_buttons_layout)
         
-        # Message list
+        # Message list with move controls
+        message_list_row = QtWidgets.QHBoxLayout()
+        message_move_col = QtWidgets.QVBoxLayout()
+        self.move_message_up_button = QtWidgets.QPushButton("↑")
+        self.move_message_down_button = QtWidgets.QPushButton("↓")
+        self.move_message_up_button.setFixedWidth(30)
+        self.move_message_down_button.setFixedWidth(30)
+        message_move_col.addWidget(self.move_message_up_button)
+        message_move_col.addWidget(self.move_message_down_button)
+        message_move_col.addStretch()
         self.message_list = QtWidgets.QListWidget()
         self.message_list.itemClicked.connect(self.on_message_selected)
-        messages_layout.addWidget(self.message_list)
+        self.message_list.itemDoubleClicked.connect(self.edit_message)
+        message_list_row.addLayout(message_move_col)
+        message_list_row.addWidget(self.message_list)
+        messages_layout.addLayout(message_list_row)
+        # Connect message move buttons
+        self.move_message_up_button.clicked.connect(self.move_selected_message_up)
+        self.move_message_down_button.clicked.connect(self.move_selected_message_down)
         
         messages_group.setLayout(messages_layout)
         layout.addWidget(messages_group)
@@ -586,6 +611,7 @@ class DBCEditorWidget(QtWidgets.QWidget):
         self.add_signal_button = QtWidgets.QPushButton("Add Signal")
         self.edit_signal_button = QtWidgets.QPushButton("Edit Signal")
         self.delete_signal_button = QtWidgets.QPushButton("Delete Signal")
+        self.duplicate_signal_button = QtWidgets.QPushButton("Duplicate")
         
         # Set button icons
         self._set_button_icon(self.add_signal_button, "icons/add.ico")
@@ -595,18 +621,35 @@ class DBCEditorWidget(QtWidgets.QWidget):
         self.add_signal_button.clicked.connect(self.add_signal)
         self.edit_signal_button.clicked.connect(self.edit_signal)
         self.delete_signal_button.clicked.connect(self.delete_signal)
+        self.duplicate_signal_button.clicked.connect(self.duplicate_signal)
         
         signal_buttons_layout.addWidget(self.add_signal_button)
         signal_buttons_layout.addWidget(self.edit_signal_button)
         signal_buttons_layout.addWidget(self.delete_signal_button)
+        signal_buttons_layout.addWidget(self.duplicate_signal_button)
         signal_buttons_layout.addStretch()
         
         signals_layout.addLayout(signal_buttons_layout)
         
-        # Signal list
+        # Signal list with move controls
+        signal_list_row = QtWidgets.QHBoxLayout()
+        signal_move_col = QtWidgets.QVBoxLayout()
+        self.move_signal_up_button = QtWidgets.QPushButton("↑")
+        self.move_signal_down_button = QtWidgets.QPushButton("↓")
+        self.move_signal_up_button.setFixedWidth(30)
+        self.move_signal_down_button.setFixedWidth(30)
+        signal_move_col.addWidget(self.move_signal_up_button)
+        signal_move_col.addWidget(self.move_signal_down_button)
+        signal_move_col.addStretch()
         self.signal_list = QtWidgets.QListWidget()
         self.signal_list.itemClicked.connect(self.on_signal_selected)
-        signals_layout.addWidget(self.signal_list)
+        self.signal_list.itemDoubleClicked.connect(self.edit_signal)
+        signal_list_row.addLayout(signal_move_col)
+        signal_list_row.addWidget(self.signal_list)
+        signals_layout.addLayout(signal_list_row)
+        # Connect signal move buttons
+        self.move_signal_up_button.clicked.connect(self.move_selected_signal_up)
+        self.move_signal_down_button.clicked.connect(self.move_selected_signal_down)
         
         signals_group.setLayout(signals_layout)
         layout.addWidget(signals_group)
@@ -640,30 +683,43 @@ class DBCEditorWidget(QtWidgets.QWidget):
     def update_button_states(self):
         """Update the enabled state of buttons based on current state."""
         has_file = self.current_file_path is not None
+        # Check if we have a DBC structure initialized (either loaded or newly created)
+        has_data = self.dbc_editor._modified_data is not None
         has_messages = self.message_list.count() > 0
         has_selected_message = self.message_list.currentRow() >= 0
         has_signals = self.signal_list.count() > 0
         has_selected_signal = self.signal_list.currentRow() >= 0
+        selected_message_row = self.message_list.currentRow()
+        selected_signal_row = self.signal_list.currentRow()
+        msg_count = self.message_list.count()
+        sig_count = self.signal_list.count() if has_selected_message else 0
         
         # Force refresh of change detection
         has_changes = self.dbc_editor.has_changes()
         
         # Debug: Print button state information
-        print(f"Button states - has_file: {has_file}, has_changes: {has_changes}")
+        print(f"Button states - has_file: {has_file}, has_data: {has_data}, has_changes: {has_changes}")
         print(f"Current file: {self.current_file_path}")
         print(f"Original data exists: {self.dbc_editor._original_data is not None}")
         print(f"Modified data exists: {self.dbc_editor._modified_data is not None}")
         
-        # Enable save button if we have a file loaded (even if no changes yet)
+        # Enable save button if we have data (file loaded or new file created)
         # This allows users to save the file as-is or make changes
-        self.save_button.setEnabled(has_file)
-        self.save_as_button.setEnabled(has_file)
-        self.add_message_button.setEnabled(has_file)
-        self.edit_message_button.setEnabled(has_file and has_selected_message)
-        self.delete_message_button.setEnabled(has_file and has_selected_message)
-        self.add_signal_button.setEnabled(has_file and has_selected_message)
-        self.edit_signal_button.setEnabled(has_file and has_selected_signal)
-        self.delete_signal_button.setEnabled(has_file and has_selected_signal)
+        self.save_button.setEnabled(has_data)
+        self.save_as_button.setEnabled(has_data)
+        self.add_message_button.setEnabled(has_data)
+        self.edit_message_button.setEnabled(has_data and has_selected_message)
+        self.delete_message_button.setEnabled(has_data and has_selected_message)
+        self.duplicate_message_button.setEnabled(has_data and has_selected_message)
+        self.add_signal_button.setEnabled(has_data and has_selected_message)
+        self.edit_signal_button.setEnabled(has_data and has_selected_signal)
+        self.delete_signal_button.setEnabled(has_data and has_selected_signal)
+        self.duplicate_signal_button.setEnabled(has_data and has_selected_signal)
+        # Move buttons
+        self.move_message_up_button.setEnabled(has_data and has_messages and has_selected_message and selected_message_row > 0)
+        self.move_message_down_button.setEnabled(has_data and has_messages and has_selected_message and selected_message_row < (msg_count - 1))
+        self.move_signal_up_button.setEnabled(has_data and has_selected_message and has_signals and has_selected_signal and selected_signal_row > 0)
+        self.move_signal_down_button.setEnabled(has_data and has_selected_message and has_signals and has_selected_signal and selected_signal_row < (sig_count - 1))
         
         # Update changes label and button styling
         if has_changes:
@@ -699,8 +755,46 @@ class DBCEditorWidget(QtWidgets.QWidget):
             # Reset save button style
             self.save_button.setStyleSheet("")
     
+    def new_dbc_file(self):
+        """Create a new empty DBC file with error handling."""
+        # Check if there are unsaved changes
+        if self.dbc_editor.has_changes() and self.current_file_path:
+            reply = QtWidgets.QMessageBox.question(
+                self, "Unsaved Changes",
+                "You have unsaved changes. Do you want to create a new file anyway?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No
+            )
+            if reply == QtWidgets.QMessageBox.No:
+                return
+        
+        try:
+            self.status_label.setText("Creating new DBC file...")
+            data = self.dbc_editor.create_new_dbc()
+            self.current_file_path = None
+            self.file_label.setText("New DBC file (not saved)")
+            self.populate_message_list()
+            self.status_label.setText("New DBC file created. Add messages to get started.")
+            QtWidgets.QApplication.processEvents()
+            self.update_button_states()
+        except DBCEditorError as e:
+            self._show_error(f"Failed to create new DBC file: {str(e)}")
+        except Exception as e:
+            self._show_error(f"Unexpected error: {str(e)}")
+
     def load_dbc_file(self):
-        """Load a DBC file via a file dialog (existing UI flow)."""
+        """Load a DBC file with error handling."""
+        # Check if there are unsaved changes
+        if self.dbc_editor.has_changes() and self.current_file_path:
+            reply = QtWidgets.QMessageBox.question(
+                self, "Unsaved Changes",
+                "You have unsaved changes. Do you want to load a new file anyway?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No
+            )
+            if reply == QtWidgets.QMessageBox.No:
+                return
+        
         try:
             file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
                 self, "Load DBC File", "", "DBC Files (*.dbc);;All Files (*)"
@@ -980,16 +1074,139 @@ class DBCEditorWidget(QtWidgets.QWidget):
             except Exception as e:
                 self._show_error(f"Unexpected error: {str(e)}")
                 self.status_label.setText("Unexpected error")
+    
+    def duplicate_signal(self):
+        """Duplicate the selected signal."""
+        message_row = self.message_list.currentRow()
+        signal_row = self.signal_list.currentRow()
+        if message_row < 0 or signal_row < 0:
+            return
+        try:
+            new_sig_idx = self.dbc_editor.duplicate_signal(message_row, signal_row)
+            self.populate_message_list()
+            self.message_list.setCurrentRow(message_row)
+            current_message = self.message_list.item(message_row).data(QtCore.Qt.UserRole)
+            self.populate_signal_list(current_message)
+            # Select the newly created signal
+            self.signal_list.setCurrentRow(new_sig_idx)
+            self.status_label.setText("Signal duplicated successfully")
+            self.update_button_states()
+        except DBCEditorError as e:
+            self._show_error(f"Failed to duplicate signal: {str(e)}")
+            self.status_label.setText("Failed to duplicate signal")
+        except Exception as e:
+            self._show_error(f"Unexpected error: {str(e)}")
+            self.status_label.setText("Unexpected error")
+    
+    def duplicate_message(self):
+        """Duplicate the selected message."""
+        current_row = self.message_list.currentRow()
+        if current_row < 0:
+            return
+        try:
+            new_idx = self.dbc_editor.duplicate_message(current_row)
+            self.populate_message_list()
+            # Select the newly created message
+            self.message_list.setCurrentRow(new_idx)
+            new_msg = self.message_list.item(new_idx).data(QtCore.Qt.UserRole)
+            self.populate_signal_list(new_msg)
+            self.status_label.setText("Message duplicated successfully")
+            self.update_button_states()
+        except DBCEditorError as e:
+            self._show_error(f"Failed to duplicate message: {str(e)}")
+            self.status_label.setText("Failed to duplicate message")
+        except Exception as e:
+            self._show_error(f"Unexpected error: {str(e)}")
+            self.status_label.setText("Unexpected error")
+    
+    def move_selected_message_up(self):
+        """Move the selected message up."""
+        row = self.message_list.currentRow()
+        if row <= 0:
+            return
+        try:
+            new_idx = self.dbc_editor.move_message_up(row)
+            self.populate_message_list()
+            self.message_list.setCurrentRow(new_idx)
+            current_message = self.message_list.item(new_idx).data(QtCore.Qt.UserRole)
+            self.populate_signal_list(current_message)
+            self.status_label.setText("Message moved up")
+            self.update_button_states()
+        except DBCEditorError as e:
+            self._show_error(f"Failed to move message: {str(e)}")
+        except Exception as e:
+            self._show_error(f"Unexpected error: {str(e)}")
+    
+    def move_selected_message_down(self):
+        """Move the selected message down."""
+        row = self.message_list.currentRow()
+        if row < 0 or row >= self.message_list.count() - 1:
+            return
+        try:
+            new_idx = self.dbc_editor.move_message_down(row)
+            self.populate_message_list()
+            self.message_list.setCurrentRow(new_idx)
+            current_message = self.message_list.item(new_idx).data(QtCore.Qt.UserRole)
+            self.populate_signal_list(current_message)
+            self.status_label.setText("Message moved down")
+            self.update_button_states()
+        except DBCEditorError as e:
+            self._show_error(f"Failed to move message: {str(e)}")
+        except Exception as e:
+            self._show_error(f"Unexpected error: {str(e)}")
+    
+    def move_selected_signal_up(self):
+        """Move the selected signal up within the current message."""
+        msg_row = self.message_list.currentRow()
+        sig_row = self.signal_list.currentRow()
+        if msg_row < 0 or sig_row <= 0:
+            return
+        try:
+            new_sig_idx = self.dbc_editor.move_signal_up(msg_row, sig_row)
+            # Refresh lists and selection
+            self.populate_message_list()
+            self.message_list.setCurrentRow(msg_row)
+            current_message = self.message_list.item(msg_row).data(QtCore.Qt.UserRole)
+            self.populate_signal_list(current_message)
+            self.signal_list.setCurrentRow(new_sig_idx)
+            self.status_label.setText("Signal moved up")
+            self.update_button_states()
+        except DBCEditorError as e:
+            self._show_error(f"Failed to move signal: {str(e)}")
+        except Exception as e:
+            self._show_error(f"Unexpected error: {str(e)}")
+    
+    def move_selected_signal_down(self):
+        """Move the selected signal down within the current message."""
+        msg_row = self.message_list.currentRow()
+        sig_row = self.signal_list.currentRow()
+        if msg_row < 0 or sig_row < 0 or sig_row >= self.signal_list.count() - 1:
+            return
+        try:
+            new_sig_idx = self.dbc_editor.move_signal_down(msg_row, sig_row)
+            self.populate_message_list()
+            self.message_list.setCurrentRow(msg_row)
+            current_message = self.message_list.item(msg_row).data(QtCore.Qt.UserRole)
+            self.populate_signal_list(current_message)
+            self.signal_list.setCurrentRow(new_sig_idx)
+            self.status_label.setText("Signal moved down")
+            self.update_button_states()
+        except DBCEditorError as e:
+            self._show_error(f"Failed to move signal: {str(e)}")
+        except Exception as e:
+            self._show_error(f"Unexpected error: {str(e)}")
 
     def save_changes(self):
         """Save changes to the current file with error handling."""
         if not self.current_file_path:
-            self._show_error("No file is currently loaded. Please load a DBC file first.")
+            # If no file path, prompt for save as
+            self.save_as()
             return
         try:
             self.status_label.setText("Saving changes...")
             QtWidgets.QApplication.processEvents()
             self.dbc_editor.save_dbc_file(self.current_file_path)
+            self.file_label.setText(f"File: {self.current_file_path}")
             self.status_label.setText("Changes saved successfully")
             self.update_button_states()
             QtWidgets.QMessageBox.information(self, "Success", f"Changes saved successfully to:\n{self.current_file_path}")
@@ -1005,9 +1222,15 @@ class DBCEditorWidget(QtWidgets.QWidget):
                 self, "Save DBC File As", "", "DBC Files (*.dbc);;All Files (*)"
             )
             if file_path:
+                # Ensure .dbc extension
+                if not file_path.lower().endswith('.dbc'):
+                    file_path += '.dbc'
+                
                 self.status_label.setText("Saving file...")
                 QtWidgets.QApplication.processEvents()
                 self.dbc_editor.save_dbc_file(file_path)
+                self.current_file_path = file_path
+                self.file_label.setText(f"File: {file_path}")
                 self.status_label.setText("File saved successfully")
                 self.update_button_states()
                 QtWidgets.QMessageBox.information(self, "Success", f"File saved successfully to:\n{file_path}")
