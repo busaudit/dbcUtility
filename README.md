@@ -1,6 +1,6 @@
 <div align="center">
   <img src="icons/app_icon.png" alt="DBC Utility Logo" width="128" height="128">
-  <h1>DBC Viewer - CAN Database Editor</h1>
+  <h1>DBC Utility</h1>
 </div>
 
 A simple PyQt5-based GUI application for viewing, editing, and managing CAN (Controller Area Network) DBC files.
@@ -28,7 +28,7 @@ A simple PyQt5-based GUI application for viewing, editing, and managing CAN (Con
 ## Project Structure
 
 ```
-dbcViewer/
+dbcUtility/
 ├── main.py                # Main application entry point
 ├── src/                   # Source code directory
 │   ├── DBCUtility.py      # Main application logic
@@ -57,7 +57,7 @@ dbcViewer/
 1. **Clone the repository**:
    ```bash
    git clone <repository-url>
-   cd dbcViewer
+   cd dbcUtility
    ```
 
 2. **Install dependencies**:
@@ -84,7 +84,7 @@ dbcViewer/
 3. **Build from source**:
    ```bash
    git clone <repository-url>
-   cd dbcViewer
+   cd dbcUtility
    pip install -r requirements.txt
    python main.py
    ```

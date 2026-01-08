@@ -292,15 +292,15 @@ class HomeScreenWidget(QtWidgets.QWidget):
         self.recent_list.itemDoubleClicked.connect(self._on_recent_double_clicked)
         card_layout.addWidget(self.recent_list, 0)
 
-        created_by = QtWidgets.QLabel("Created by Abhijith")
-        created_by.setAlignment(QtCore.Qt.AlignCenter)
-        created_by.setStyleSheet("color: rgba(0, 0, 0, 0.55);")
-        footer_row = QtWidgets.QHBoxLayout()
-        footer_row.addStretch()
-        footer_row.addWidget(created_by)
-        footer_row.addStretch()
+        # created_by = QtWidgets.QLabel("Created by Abhijith")
+        # created_by.setAlignment(QtCore.Qt.AlignCenter)
+        # created_by.setStyleSheet("color: rgba(0, 0, 0, 0.55);")
+        # footer_row = QtWidgets.QHBoxLayout()
+        # footer_row.addStretch()
+        # footer_row.addWidget(created_by)
+        # footer_row.addStretch()
 
-        card_layout.addLayout(footer_row)
+        # card_layout.addLayout(footer_row)
 
         card_wrap = QtWidgets.QHBoxLayout()
         card_wrap.addStretch()
