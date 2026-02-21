@@ -756,7 +756,7 @@ class MainWindow(QtWidgets.QMainWindow):
     APP_VERSION = get_version()
     APP_DESCRIPTION = "Open Source tool to view and edit CAN DBC files."
     APP_WEBSITE = "https://DBCUtility.com"
-    APP_GITHUB = "https://github.com/abhi-1203/dbcUtility"
+    APP_GITHUB = "https://github.com/busaudit/dbcUtility"
     APP_CREATOR = "Abhijith"
 
     def __init__(self, parent=None):

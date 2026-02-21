@@ -1,3 +1,12 @@
+# DBC Utility — now part of BusAudit
+
+DBC Utility is now maintained under the **BusAudit** ecosystem.
+This repo contains the DBC Utility code. If you previously used the old repo, please update bookmarks, CI and remote to:
+https://github.com/busaudit/dbcUtility
+
+See pinned issue for more details.
+
+
 <div align="center">
   <img src="icons/app_icon.png" alt="DBC Utility Logo" width="128" height="128">
   <h1>DBC Utility</h1>
@@ -56,7 +65,7 @@ dbcUtility/
 ### Windows
 1. **Clone the repository**:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/busaudit/dbcUtility.git
    cd dbcUtility
    ```
 
