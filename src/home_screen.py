@@ -17,7 +17,7 @@ from typing import List, Optional
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from about_dialog import AboutDialog
-from resource_utils import get_resource_path
+from resource_utils import get_resource_path, open_file_dialog
 
 class RecentFilesManager(QtCore.QObject):
     """
@@ -361,9 +361,7 @@ class HomeScreenWidget(QtWidgets.QWidget):
         if path and os.path.exists(path) and path.lower().endswith(".dbc"):
             return path
 
-        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Select DBC File", "", "DBC Files (*.dbc);;All Files (*)"
-        )
+        file_path = open_file_dialog("Select DBC File", "DBC Files (*.dbc);;All Files (*)")
         if not file_path:
             return None
         if not file_path.lower().endswith(".dbc"):
