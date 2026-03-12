@@ -14,7 +14,7 @@ import json
 from dbc_editor import DBCEditor, DBCEditorError
 from search_module import UnifiedSearchWidget
 
-from resource_utils import get_resource_path
+from resource_utils import get_resource_path, open_file_dialog, save_file_dialog
 
 class MessageEditDialog(QtWidgets.QDialog):
     """Enhanced dialog for editing message properties."""
@@ -796,9 +796,7 @@ class DBCEditorWidget(QtWidgets.QWidget):
                 return
         
         try:
-            file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
-                self, "Load DBC File", "", "DBC Files (*.dbc);;All Files (*)"
-            )
+            file_path = open_file_dialog("Load DBC File", "DBC Files (*.dbc);;All Files (*)")
             if file_path:
                 self.load_dbc_path(file_path)
         except Exception as e:
@@ -1218,9 +1216,7 @@ class DBCEditorWidget(QtWidgets.QWidget):
     def save_as(self):
         """Save changes to a new file with error handling."""
         try:
-            file_path, _ = QtWidgets.QFileDialog.getSaveFileName(
-                self, "Save DBC File As", "", "DBC Files (*.dbc);;All Files (*)"
-            )
+            file_path = save_file_dialog("Save DBC File As", "DBC Files (*.dbc);;All Files (*)")
             if file_path:
                 # Ensure .dbc extension
                 if not file_path.lower().endswith('.dbc'):

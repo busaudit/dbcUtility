@@ -38,7 +38,7 @@ import os
 import re
 from pathlib import Path
 
-from resource_utils import get_resource_path
+from resource_utils import get_resource_path, open_file_dialog
 
 def _clean_comment_text(comment_text: object) -> str:
     """
@@ -367,9 +367,7 @@ class ConverterWindow(QtWidgets.QWidget):
 
     def select_dbc_file(self):
         try:
-            file_name, _ = QtWidgets.QFileDialog.getOpenFileName(
-                self, "Select DBC File", "", "DBC Files (*.dbc);;All Files (*)"
-            )
+            file_name = open_file_dialog("Select DBC File", "DBC Files (*.dbc);;All Files (*)")
             if file_name:
                 self._prepare_new_dbc(file_name)
         except Exception as e:
