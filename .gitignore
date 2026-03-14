@@ -29,3 +29,5 @@ DBCUtility.AppDir/
 
 # Linux builds
 linuxBuilds/
+
+docs/

@@ -1,6 +1,6 @@
 [project]
 name = "dbc-utility"
-version = "1.0.2"
+version = "1.0.3"
 description = "A PyQt5-based GUI application for viewing, editing, and managing CAN (Controller Area Network) DBC files"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -24,6 +24,7 @@ dependencies = [
     "PyQt5>=5.15.2",
     "cantools>=40.0.0",
     "pyinstaller>=5.0.0",
+    "QtAwesome>=1.4.1",
 ]
 
 [project.optional-dependencies]
@@ -33,9 +34,9 @@ dev = []
 dbcUtility = "main:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/dbcUtility"
-Repository = "https://github.com/yourusername/dbcUtility"
-Issues = "https://github.com/yourusername/dbcUtility/issues"
+Homepage = "https://github.com/busaudit/dbcUtility"
+Repository = "https://github.com/busaudit/dbcUtility"
+Issues = "https://github.com/busaudit/dbcUtility/issues"
 
 [build-system]
 requires = ["hatchling"]

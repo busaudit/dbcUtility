@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+import qtawesome as qta
 
 from about_dialog import AboutDialog
 from resource_utils import get_resource_path
@@ -188,7 +189,6 @@ class HomeScreenWidget(QtWidgets.QWidget):
         card_layout.setContentsMargins(18, 18, 18, 18)
         card_layout.setSpacing(10)
 
-        # Logo
         logo_label = QtWidgets.QLabel()
         logo_label.setAlignment(QtCore.Qt.AlignCenter)
         logo_path = get_resource_path("icons/app_icon.png")
@@ -225,15 +225,14 @@ class HomeScreenWidget(QtWidgets.QWidget):
         self.can_button = QtWidgets.QPushButton("CAN Bus Viewer")
         self.can_button.setToolTip("Coming soon.")
 
-        # Icons + native buttons
-        self.view_button.setIcon(QtGui.QIcon(get_resource_path("icons/view.ico")))
-        self.edit_button.setIcon(QtGui.QIcon(get_resource_path("icons/edit.ico")))
-        self.can_button.setIcon(QtGui.QIcon(get_resource_path("icons/can_bus.ico")))
+        self.view_button.setIcon(qta.icon("fa5s.eye", color="#333"))
+        self.edit_button.setIcon(qta.icon("fa5s.edit", color="#333"))
+        self.can_button.setIcon(qta.icon("fa5s.network-wired", color="#333"))
 
         about_btn = QtWidgets.QPushButton("About")
         about_btn.setToolTip("About this tool")
         about_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        about_btn.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MessageBoxInformation))
+        about_btn.setIcon(qta.icon("fa5s.info-circle", color="#333"))
         about_btn.setIconSize(QtCore.QSize(18, 18))
         about_btn.setMinimumHeight(40)
         about_btn.clicked.connect(self._show_about)
@@ -291,16 +290,6 @@ class HomeScreenWidget(QtWidgets.QWidget):
         self.recent_list.itemSelectionChanged.connect(self._on_recent_selection_changed)
         self.recent_list.itemDoubleClicked.connect(self._on_recent_double_clicked)
         card_layout.addWidget(self.recent_list, 0)
-
-        # created_by = QtWidgets.QLabel("Created by Abhijith")
-        # created_by.setAlignment(QtCore.Qt.AlignCenter)
-        # created_by.setStyleSheet("color: rgba(0, 0, 0, 0.55);")
-        # footer_row = QtWidgets.QHBoxLayout()
-        # footer_row.addStretch()
-        # footer_row.addWidget(created_by)
-        # footer_row.addStretch()
-
-        # card_layout.addLayout(footer_row)
 
         card_wrap = QtWidgets.QHBoxLayout()
         card_wrap.addStretch()

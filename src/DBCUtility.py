@@ -39,6 +39,16 @@ import re
 from pathlib import Path
 
 from resource_utils import get_resource_path
+from message_layout_visualizer import MessageSignalLayoutWindow
+from multiplex_support import (
+    classify_signal,
+    filter_signals_by_mux_id,
+    format_mux_indicator,
+    format_mux_id_with_name,
+    get_mux_id_name_from_messages,
+    get_mux_ids,
+    is_message_multiplexed,
+)
 
 def _clean_comment_text(comment_text: object) -> str:
     """
@@ -90,8 +100,11 @@ try:
 except ImportError:
     show_import_error('cantools')
 
+import qtawesome as qta  # pyright: ignore[reportMissingImports]
+
 from search_module import UnifiedSearchWidget
 from dbc_editor_ui import DBCEditorWidget
+from dbc_comparator_ui import DBCCompareWidget
 from home_screen import HomeScreenWidget, RecentFilesManager
 
 def get_version():
@@ -156,7 +169,13 @@ class DBCProcessor:
         if not dbc_path:
             raise ValueError("No DBC file path provided.")
         try:
-            self.db = cantools.database.load_file(dbc_path)
+            try:
+                self.db = cantools.database.load_file(dbc_path, strict=True)
+            except cantools.database.errors.Error as exc:
+                if "are overlapping in message" in str(exc):
+                    self.db = cantools.database.load_file(dbc_path, strict=False)
+                else:
+                    raise
         except Exception as e:
             raise RuntimeError(f"Failed to load DBC file: {e}")
         self._extracted_data = []
@@ -219,9 +238,12 @@ class DBCProcessor:
                     "start bit|length": f"{sig.start}|{sig.length}",
                     "unit": getattr(sig, 'unit', '') or '',
                     "initial_value": getattr(sig, 'initial', None),
-                    "values": values_dict if values_dict else None,  # Enum/choice table
+                    "values": values_dict if values_dict else None,
                     "receivers": [str(r) for r in sig.receivers],
-                    "signal_groups": signal_groups_membership,  # List[str] of group names this signal belongs to
+                    "signal_groups": signal_groups_membership,
+                    "is_multiplexer": getattr(sig, 'is_multiplexer', False),
+                    "multiplexer_ids": list(getattr(sig, 'multiplexer_ids', None) or []),
+                    "multiplexer_signal": getattr(sig, 'multiplexer_signal', None),
                     "comments": cleaned_comments,
                     "item_text": f"{msg.name}.{sig.name}"
                 }
@@ -259,9 +281,10 @@ class ConverterWindow(QtWidgets.QWidget):
         self.dbc_browse_btn = QtWidgets.QPushButton("Browse...")
         self.load_signals_btn = QtWidgets.QPushButton("Load DBC")
         
-        # Set button icons
-        self._set_button_icon(self.dbc_browse_btn, "icons/browse.ico")
-        self._set_button_icon(self.load_signals_btn, "icons/load.ico")
+        self.dbc_browse_btn.setIcon(qta.icon("fa5s.folder-open", color="#333"))
+        self.dbc_browse_btn.setIconSize(QtCore.QSize(16, 16))
+        self.load_signals_btn.setIcon(qta.icon("fa5s.file-upload", color="#333"))
+        self.load_signals_btn.setIconSize(QtCore.QSize(16, 16))
         
         dbc_layout.addWidget(self.dbc_label)
         dbc_layout.addWidget(self.dbc_file_name_label)
@@ -309,6 +332,52 @@ class ConverterWindow(QtWidgets.QWidget):
         self.search_widget.search_edit.setPlaceholderText("Search messages, signals, or frame IDs...")
         self.search_widget.searchChanged.connect(self._apply_filter_to_tree)
         left_v_layout.addWidget(self.search_widget)
+
+        # Toolbar row: mux filter + collapse/expand + visualizer
+        toolbar_row = QtWidgets.QHBoxLayout()
+        toolbar_row.setContentsMargins(0, 2, 0, 2)
+        toolbar_row.setSpacing(6)
+
+        self.viewer_mux_filter_label = QtWidgets.QLabel("Multiplexer Signal:")
+        self.viewer_mux_filter_combo = QtWidgets.QComboBox()
+        self.viewer_mux_filter_combo.setToolTip("Filter signals by multiplexer ID")
+        self.viewer_mux_filter_combo.setMinimumWidth(140)
+        self.viewer_mux_filter_combo.currentIndexChanged.connect(self._on_viewer_mux_filter_changed)
+        self.viewer_mux_filter_label.hide()
+        self.viewer_mux_filter_combo.hide()
+        toolbar_row.addWidget(self.viewer_mux_filter_label)
+        toolbar_row.addWidget(self.viewer_mux_filter_combo)
+
+        toolbar_row.addStretch()
+
+        self.visualize_btn = QtWidgets.QPushButton(" Visualize Layout")
+        self.visualize_btn.setToolTip("Open the message signal layout visualizer")
+        self.visualize_btn.setFixedHeight(26)
+        self.visualize_btn.setStyleSheet(
+            "QPushButton { padding: 2px 8px; }"
+        )
+        self.visualize_btn.setIcon(qta.icon("fa5s.project-diagram", color="#333"))
+        self.visualize_btn.setIconSize(QtCore.QSize(16, 16))
+        self.visualize_btn.clicked.connect(self._open_viewer_visualizer)
+        toolbar_row.addWidget(self.visualize_btn)
+
+        self._viewer_tree_fully_expanded = False
+        self.expand_collapse_btn = QtWidgets.QPushButton()
+        self.expand_collapse_btn.setFixedHeight(26)
+        self.expand_collapse_btn.setIconSize(QtCore.QSize(16, 16))
+        self.expand_collapse_btn.setStyleSheet(
+            "QPushButton { background-color: #e8e8e8; border: 1px solid #d0d0d0; border-radius: 4px; color: #333333; font-size: 12px; padding: 2px 8px; }"
+            " QPushButton:hover { background-color: #d8d8d8; }"
+            " QPushButton:pressed { background-color: #c8c8c8; }"
+        )
+        self.expand_collapse_btn.clicked.connect(self._toggle_expand_collapse)
+        self._update_expand_collapse_button()
+        toolbar_row.addWidget(self.expand_collapse_btn)
+
+        left_v_layout.addLayout(toolbar_row)
+
+        self.layout_visualizer_window = None
+
         self.tree_widget = QtWidgets.QTreeWidget()
         self.tree_widget.setHeaderLabels(["Key", "Value", "Type"])
         self.tree_widget.header().setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
@@ -323,9 +392,10 @@ class ConverterWindow(QtWidgets.QWidget):
         self.exitBtn.setStyleSheet("background-color: #e74c3c; color: white; border-radius: 5px; padding: 5px 10px;")
         self.exitBtn.setFixedWidth(80)
         
-        # Set button icons
-        self._set_button_icon(self.refresh_btn, "icons/load_white.ico")
-        self._set_button_icon(self.exitBtn, "icons/exit.ico")
+        self.refresh_btn.setIcon(qta.icon("fa5s.sync-alt", color="white"))
+        self.refresh_btn.setIconSize(QtCore.QSize(16, 16))
+        self.exitBtn.setIcon(qta.icon("fa5s.sign-out-alt", color="white"))
+        self.exitBtn.setIconSize(QtCore.QSize(16, 16))
         
         top_buttons_layout = QtWidgets.QHBoxLayout()
         top_buttons_layout.addStretch()
@@ -353,17 +423,7 @@ class ConverterWindow(QtWidgets.QWidget):
         self.exitBtn.clicked.connect(self.parent().close)
         self.tree_widget.itemClicked.connect(self.display_item_details)
 
-    def _set_button_icon(self, button, icon_path):
-        """Set icon for a button if the icon file exists."""
-        try:
-            full_icon_path = get_resource_path(icon_path)
-            if os.path.exists(full_icon_path):
-                icon = QtGui.QIcon(full_icon_path)
-                button.setIcon(icon)
-                # Set icon size
-                button.setIconSize(QtCore.QSize(16, 16))
-        except Exception as e:
-            print(f"Could not load icon {icon_path}: {e}")
+    
 
     def select_dbc_file(self):
         try:
@@ -409,6 +469,8 @@ class ConverterWindow(QtWidgets.QWidget):
         self.details_text_edit.clear()
         self.details_title_label.setText("Item Details")
         self.search_widget.clear_search()
+        self.viewer_mux_filter_label.hide()
+        self.viewer_mux_filter_combo.hide()
         self.dbc_processor._extracted_data = []
         self._full_data = []
         # Clear file info panel
@@ -426,6 +488,7 @@ class ConverterWindow(QtWidgets.QWidget):
         try:
             self.message_label.setText("Loading DBC file and extracting data...")
             self._full_data = self.dbc_processor.load_dbc_file(self.dbc_path)
+            self._update_viewer_mux_filter()
             self._apply_filter_to_tree()
             self._update_file_info()
             self.message_label.setText("DBC file loaded successfully")
@@ -508,6 +571,149 @@ class ConverterWindow(QtWidgets.QWidget):
         except Exception as e:
             self._show_error(f"Error filtering data: {e}")
 
+    # -- Collapse / Expand ----------------------------------------------------
+
+    def _update_expand_collapse_button(self) -> None:
+        """Set icon and label to reflect the next action (expand vs collapse)."""
+        if self._viewer_tree_fully_expanded:
+            self.expand_collapse_btn.setIcon(qta.icon("fa5s.compress-alt", color="#333"))
+            self.expand_collapse_btn.setText("Collapse all")
+        else:
+            self.expand_collapse_btn.setIcon(qta.icon("fa5s.expand-alt", color="#333"))
+            self.expand_collapse_btn.setText("Expand all")
+
+    def _toggle_expand_collapse(self) -> None:
+        """Toggle between full expand and default collapse view."""
+        if self._viewer_tree_fully_expanded:
+            self._collapse_all()
+            self._viewer_tree_fully_expanded = False
+        else:
+            self.tree_widget.expandAll()
+            self._viewer_tree_fully_expanded = True
+        self._update_expand_collapse_button()
+
+    def _collapse_all(self) -> None:
+        """Collapse tree to show only message names with signal names visible."""
+        self.tree_widget.collapseAll()
+        for i in range(self.tree_widget.topLevelItemCount()):
+            msg_item = self.tree_widget.topLevelItem(i)
+            msg_item.setExpanded(True)
+            for j in range(msg_item.childCount()):
+                child = msg_item.child(j)
+                if child.text(2) in ("Collection",):
+                    child.setExpanded(True)
+                    for k in range(child.childCount()):
+                        child.child(k).setExpanded(False)
+
+    # -- Viewer mux filter ----------------------------------------------------
+
+    def _update_viewer_mux_filter(self) -> None:
+        """Show/hide the mux filter based on whether the loaded data has multiplexed messages."""
+        self.viewer_mux_filter_combo.blockSignals(True)
+        self.viewer_mux_filter_combo.clear()
+
+        all_mux_ids: set = set()
+        for msg_data in self._full_data:
+            for sig in msg_data.get("signals", []):
+                for mid in sig.get("multiplexer_ids", []) or []:
+                    all_mux_ids.add(int(mid))
+
+        if all_mux_ids:
+            self.viewer_mux_filter_combo.addItem("All Signals", None)
+            for mid in sorted(all_mux_ids):
+                name = get_mux_id_name_from_messages(self._full_data, mid)
+                label = f"0x{mid:X} ({name})" if name else f"0x{mid:X}"
+                self.viewer_mux_filter_combo.addItem(f"Mux ID: {label}", mid)
+            self.viewer_mux_filter_label.show()
+            self.viewer_mux_filter_combo.show()
+        else:
+            self.viewer_mux_filter_label.hide()
+            self.viewer_mux_filter_combo.hide()
+
+        self.viewer_mux_filter_combo.blockSignals(False)
+
+    def _on_viewer_mux_filter_changed(self) -> None:
+        self._apply_filter_to_tree(
+            self.search_widget.search_edit.text(),
+            self._get_current_view_filter_type(),
+        )
+
+    def _get_current_view_filter_type(self) -> str:
+        """Return the currently selected filter type from the search widget."""
+        if hasattr(self.search_widget, 'filter_group'):
+            checked = self.search_widget.filter_group.checkedButton()
+            if checked:
+                mapping = {
+                    self.search_widget.filter_all_rb: "all",
+                    self.search_widget.filter_message_rb: "message",
+                    self.search_widget.filter_signal_rb: "signal",
+                    self.search_widget.filter_frame_id_rb: "frame_id",
+                }
+                return mapping.get(checked, "all")
+        return "all"
+
+    # -- Viewer visualizer ----------------------------------------------------
+
+    def _open_viewer_visualizer(self) -> None:
+        """Open the layout visualizer for the currently selected message in the tree."""
+        current_item = self.tree_widget.currentItem()
+        msg_data = self._find_parent_message_data(current_item)
+        if msg_data is None:
+            QtWidgets.QMessageBox.information(
+                self, "No Message Selected",
+                "Select a message or signal in the tree to visualize its layout."
+            )
+            return
+
+        viz_data = self._viewer_msg_to_editor_format(msg_data)
+        try:
+            if self.layout_visualizer_window is None:
+                self.layout_visualizer_window = MessageSignalLayoutWindow(self)
+            self.layout_visualizer_window.set_message_data(viz_data)
+            self.layout_visualizer_window.show()
+            self.layout_visualizer_window.raise_()
+            self.layout_visualizer_window.activateWindow()
+        except Exception as exc:
+            self._show_error(f"Failed to open visualizer: {exc}")
+
+    def _find_parent_message_data(self, item):
+        """Walk up the tree to find the message-level data dict."""
+        while item is not None:
+            data = item.data(0, QtCore.Qt.UserRole)
+            if isinstance(data, dict) and "message_name" in data:
+                return data
+            item = item.parent()
+        return None
+
+    @staticmethod
+    def _viewer_msg_to_editor_format(msg_data: dict) -> dict:
+        """Convert viewer message dict to the format expected by the visualizer."""
+        frame_id = msg_data["frame_id"]
+        signals = []
+        for sig in msg_data.get("signals", []):
+            bit_info = sig.get("start bit|length", "0|1").split("|")
+            start_bit = int(bit_info[0]) if len(bit_info) > 0 else 0
+            length = int(bit_info[1]) if len(bit_info) > 1 else 1
+            sig_dict = {
+                "name": sig["signal_name"],
+                "start_bit": start_bit,
+                "length": length,
+                "byte_order": sig.get("byte_order", "little_endian"),
+                "is_multiplexer": sig.get("is_multiplexer", False),
+                "multiplexer_ids": sig.get("multiplexer_ids", []),
+            }
+            if sig.get("values"):
+                sig_dict["choices"] = dict(sig["values"])
+            signals.append(sig_dict)
+        return {
+            "name": msg_data["message_name"],
+            "frame_id": frame_id,
+            "length": msg_data.get("length", 8),
+            "is_extended_frame": frame_id > 0x7FF,
+            "is_fd": msg_data.get("length", 8) > 8,
+            "signals": signals,
+        }
+
     @staticmethod
     def _tree_add_group(parent, title: str, type_name: str = "Group") -> QtWidgets.QTreeWidgetItem:
         item = QtWidgets.QTreeWidgetItem(parent)
@@ -532,7 +738,9 @@ class ConverterWindow(QtWidgets.QWidget):
             sig_data: Dictionary containing signal information
         """
         sig_item = QtWidgets.QTreeWidgetItem(parent_item)
-        sig_item.setText(0, sig_data["signal_name"])
+        mux_tag = format_mux_indicator(sig_data)
+        display_name = f"{sig_data['signal_name']} {mux_tag}" if mux_tag else sig_data["signal_name"]
+        sig_item.setText(0, display_name)
         sig_item.setText(2, "Signal")
         sig_item.setData(0, QtCore.Qt.UserRole, sig_data)
 
@@ -611,8 +819,21 @@ class ConverterWindow(QtWidgets.QWidget):
             displayed_comment = _clean_comment_text(comments)
             if len(displayed_comment) > 50:
                 displayed_comment = displayed_comment[:50] + "..."
-            if displayed_comment:  # Only show if there's content after cleaning
+            if displayed_comment:
                 self._tree_add_row(sig_item, "Comments", displayed_comment, "str")
+
+        # Multiplexing
+        mux_role = classify_signal(sig_data)
+        if mux_role != "regular":
+            mux_group = self._tree_add_group(sig_item, "Multiplexing")
+            role_display = "Multiplexer (selector)" if mux_role == "multiplexer" else "Multiplexed"
+            self._tree_add_row(mux_group, "Role", role_display, "str")
+            mux_ids = sig_data.get("multiplexer_ids") or []
+            if mux_ids:
+                self._tree_add_row(mux_group, "Mux IDs", ", ".join(f"0x{int(i):X}" for i in mux_ids), "str")
+            mux_sig = sig_data.get("multiplexer_signal")
+            if mux_sig:
+                self._tree_add_row(mux_group, "Multiplexer Signal", mux_sig, "str")
 
     def _populate_tree_widget(self, data):
         """
@@ -624,6 +845,12 @@ class ConverterWindow(QtWidgets.QWidget):
         if not data:
             QtWidgets.QTreeWidgetItem(self.tree_widget).setText(0, "No matching data found.")
             return
+
+        viewer_mux_id = (
+            self.viewer_mux_filter_combo.currentData()
+            if self.viewer_mux_filter_combo.isVisible()
+            else None
+        )
 
         for msg_data in data:
             msg_item = QtWidgets.QTreeWidgetItem(self.tree_widget)
@@ -646,8 +873,17 @@ class ConverterWindow(QtWidgets.QWidget):
             senders_item = self._tree_add_row(msg_item, "Senders", ", ".join(senders) if senders else "None", "List")
             senders_item.setData(0, QtCore.Qt.UserRole, {"Type": "Senders List", "Senders": senders})
 
-            # Signals grouped by name for fast lookup
-            signals = msg_data.get("signals") or []
+            # Optionally filter signals by the viewer's mux combo
+            all_signals = msg_data.get("signals") or []
+            if viewer_mux_id is not None:
+                signals = [
+                    s for s in all_signals
+                    if s.get("is_multiplexer", False)
+                    or not s.get("multiplexer_ids")
+                    or viewer_mux_id in (s.get("multiplexer_ids") or [])
+                ]
+            else:
+                signals = all_signals
             signals_by_name = {sig["signal_name"]: sig for sig in signals}
             signals_added_to_groups = set()
 
@@ -671,13 +907,45 @@ class ConverterWindow(QtWidgets.QWidget):
 
             # Ungrouped signals (or all signals if no groups)
             ungrouped = [sig for sig in signals if sig["signal_name"] not in signals_added_to_groups]
-            if ungrouped:
+
+            has_mux = any(s.get("is_multiplexer", False) for s in ungrouped)
+            if has_mux:
+                regular = []
+                muxer = []
+                muxed_by_id: dict = {}
+                for sig in ungrouped:
+                    if sig.get("is_multiplexer", False):
+                        muxer.append(sig)
+                    elif sig.get("multiplexer_ids"):
+                        for mid in sig["multiplexer_ids"]:
+                            muxed_by_id.setdefault(int(mid), []).append(sig)
+                    else:
+                        regular.append(sig)
+
+                title = "Ungrouped Signals" if signal_groups else "Signals"
+                root = self._tree_add_group(msg_item, title, "Collection")
+                if muxer:
+                    muxer_group = self._tree_add_group(root, "Multiplexer", "Collection")
+                    for sig_data in muxer:
+                        self._add_signal_to_tree(muxer_group, sig_data)
+                if regular:
+                    reg_group = self._tree_add_group(root, "Regular Signals", "Collection")
+                    for sig_data in regular:
+                        self._add_signal_to_tree(reg_group, sig_data)
+                for mid in sorted(muxed_by_id):
+                    label = format_mux_id_with_name(msg_data, mid)
+                    mid_group = self._tree_add_group(root, f"Mux ID: {label}", "Collection")
+                    for sig_data in muxed_by_id[mid]:
+                        self._add_signal_to_tree(mid_group, sig_data)
+            elif ungrouped:
                 title = "Ungrouped Signals" if signal_groups else "Signals"
                 root = self._tree_add_group(msg_item, title, "Collection")
                 for sig_data in ungrouped:
                     self._add_signal_to_tree(root, sig_data)
 
-        self.tree_widget.expandAll()
+        self._collapse_all()
+        self._viewer_tree_fully_expanded = False
+        self._update_expand_collapse_button()
 
     def display_item_details(self, item, column):
         try:
@@ -703,7 +971,6 @@ class ConverterWindow(QtWidgets.QWidget):
                             details_html.append(f"<div><b>Receivers:</b> {', '.join(sig['receivers'])}</div>")
                             details_html.append(f"<div><b>Is Signed:</b> {sig['is_signed']}</div>")
                             details_html.append(f"<div><b>Minimum:</b> {sig['minimum']}</div>")
-                            details_html.append(f"<div><b>Maximum:</b> {sig['maximum']}</div>")
                             details_html.append(f"<div><b>Maximum:</b> {sig['maximum']}</div>")
                             details_html.append(f"<div><b>Start Bit|Length:</b> {sig['start bit|length']}</div>")
                             details_html.append("</div>")
@@ -775,26 +1042,22 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.view_dbc_page = ConverterWindow(self)
         self.edit_dbc_page = DBCEditorWidget(self)
+        self.compare_dbc_page = DBCCompareWidget(self)
         self.view_can_bus_page = EmptyWidget("Coming Soon: CAN Bus Viewer.")
 
         self.tab_widget = QtWidgets.QTabWidget()
-        # Add tabs with icons
-        self.tab_widget.addTab(self.view_dbc_page, self._get_tab_icon("icons/view.ico"), "View DBC")
-        self.tab_widget.addTab(self.edit_dbc_page, self._get_tab_icon("icons/edit.ico"), "Edit DBC")
-        self.tab_widget.addTab(self.view_can_bus_page, self._get_tab_icon("icons/can_bus.ico"), "CAN Bus Viewer")
+        self.tab_widget.addTab(self.view_dbc_page, qta.icon("fa5s.eye"), "View DBC")
+        self.tab_widget.addTab(self.edit_dbc_page, qta.icon("fa5s.edit"), "Edit DBC")
+        self.tab_widget.addTab(self.compare_dbc_page, qta.icon("fa6s.code-compare"), "Compare DBC")
+        self.tab_widget.addTab(self.view_can_bus_page, qta.icon("fa5s.network-wired"), "CAN Bus Viewer")
 
         # Home button shown next to the tabs (returns to the Home screen)
         self.home_button = QtWidgets.QToolButton()
         self.home_button.setAutoRaise(True)
         self.home_button.setToolTip("Home")
         self.home_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        try:
-            home_icon = self._get_tab_icon("icons/home.ico")
-            if home_icon.isNull():
-                home_icon = self.style().standardIcon(QtWidgets.QStyle.SP_DirHomeIcon)
-            self.home_button.setIcon(home_icon)
-        except Exception:
-            pass
+        self.home_button.setIcon(qta.icon("fa5s.home"))
+        self.home_button.setIconSize(QtCore.QSize(20, 20))
         self.home_button.clicked.connect(self._show_home)
         self.tab_widget.setCornerWidget(self.home_button, QtCore.Qt.TopLeftCorner)
 
@@ -822,6 +1085,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.view_dbc_page.dbcFileLoaded.connect(self._on_dbc_file_loaded)
         if hasattr(self.edit_dbc_page, "dbcFileLoaded"):
             self.edit_dbc_page.dbcFileLoaded.connect(self._on_dbc_file_loaded)
+
+        # Wire editor save-review flow through the Compare tab
+        self.edit_dbc_page.saveReviewRequested.connect(self._open_save_review)
+        self.compare_dbc_page.saveConfirmed.connect(self._on_save_confirmed)
+        self.compare_dbc_page.reviewCancelled.connect(self._on_review_cancelled)
 
         self._create_status_bar()
 
@@ -861,32 +1129,38 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _open_can_bus(self):
         self._stack.setCurrentWidget(self.tab_widget)
+        self.tab_widget.setCurrentIndex(3)
+
+    def _open_save_review(self, original_data, modified_data, file_path):
+        """Navigate to Compare tab in save-review mode."""
+        self.compare_dbc_page.load_editor_diff(original_data, modified_data, file_path)
         self.tab_widget.setCurrentIndex(2)
 
+    def _on_save_confirmed(self, file_path, dbc_text):
+        """Execute the actual save after the user confirms in Compare tab."""
+        self.edit_dbc_page.perform_text_save(file_path, dbc_text)
+        self.tab_widget.setCurrentIndex(1)
+
+    def _on_review_cancelled(self):
+        """Return to the editor when the user cancels the review."""
+        self.tab_widget.setCurrentIndex(1)
+
     def _set_app_icon(self):
-        """Set the application icon if the icon file exists."""
+        """Set the application icon."""
         try:
             icon_path = get_resource_path("icons/app_icon.ico")
             if os.path.exists(icon_path):
                 icon = QtGui.QIcon(icon_path)
-                # Set window icon (this affects the window title bar)
-                self.setWindowIcon(icon)
-                # Ensure application icon is set (this affects taskbar)
-                app = QtWidgets.QApplication.instance()
-                if app and app.windowIcon().isNull():
-                    app.setWindowIcon(icon)
+            else:
+                icon = qta.icon("fa5s.database", color="#4CAF50")
+            self.setWindowIcon(icon)
+            app = QtWidgets.QApplication.instance()
+            if app and app.windowIcon().isNull():
+                app.setWindowIcon(icon)
         except Exception as e:
-            print(f"Could not load application icon {icon_path}: {e}")
+            print(f"Could not set application icon: {e}")
 
-    def _get_tab_icon(self, icon_path):
-        """Get icon for tab if the icon file exists."""
-        try:
-            full_icon_path = get_resource_path(icon_path)
-            if os.path.exists(full_icon_path):
-                return QtGui.QIcon(full_icon_path)
-        except Exception as e:
-            print(f"Could not load tab icon {icon_path}: {e}")
-        return QtGui.QIcon()  # Return empty icon if file doesn't exist
+    
 
     def _create_status_bar(self):
         status_bar = self.statusBar()

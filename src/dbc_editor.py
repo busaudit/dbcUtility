@@ -5,12 +5,14 @@ DBC Editor Module
 Supports loading, editing, and saving CAN/J1939 DBC files.
 """
 
+import copy
 import os
 import logging
 import json
 import shutil
 from typing import Dict, List, Any, Optional
 import cantools
+from dbc_comparator import build_dbc_string
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,16 +27,30 @@ class DBCEditor:
         self._original_data = None
         self._modified_data = None
 
+    def _clone_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a fully independent copy for change tracking."""
+        return copy.deepcopy(data)
+
+    def _safe_get_value(self, obj: Any, attr_name: str, default: Any = None) -> Any:
+        """Read cantools attributes that may be properties or callables."""
+        try:
+            value = getattr(obj, attr_name, default)
+            if callable(value):
+                value = value()
+            return value
+        except Exception:
+            return default
+
     def create_new_dbc(self) -> Dict[str, Any]:
         """
         Create a new empty DBC file structure.
         Returns a dict with empty messages list.
         """
         try:
-            self.db = cantools.database.Database()
+            self.db = cantools.database.Database(sort_signals=None)
             self.file_path = None
             self._original_data = {'messages': []}
-            self._modified_data = {'messages': []}
+            self._modified_data = self._clone_data(self._original_data)
             
             logger.info("Created new empty DBC file")
             return self._original_data
@@ -55,94 +71,59 @@ class DBCEditor:
                 raise DBCEditorError("File must have .dbc extension")
             
             self.file_path = file_path
-            self.db = cantools.database.load_file(file_path)
+            try:
+                self.db = cantools.database.load_file(file_path, strict=True)
+            except cantools.database.errors.Error as exc:
+                if "are overlapping in message" in str(exc):
+                    self.db = cantools.database.load_file(file_path, strict=False)
+                else:
+                    raise
             messages_data = []
             
             for msg in self.db.messages:
                 signals_data = []
                 for sig in msg.signals:
-                    # Safely get signal properties with defaults
-                    try:
-                        scale = getattr(sig, 'scale', 1.0)
-                        if hasattr(scale, '__call__'):  # If scale is a callable
-                            scale = scale()
-                    except:
-                        scale = 1.0
-                    
-                    try:
-                        offset = getattr(sig, 'offset', 0.0)
-                        if hasattr(offset, '__call__'):  # If offset is a callable
-                            offset = offset()
-                    except:
-                        offset = 0.0
-                    
-                    try:
-                        minimum = getattr(sig, 'minimum', None)
-                        if hasattr(minimum, '__call__'):  # If minimum is a callable
-                            minimum = minimum()
-                    except:
-                        minimum = None
-                    
-                    try:
-                        maximum = getattr(sig, 'maximum', None)
-                        if hasattr(maximum, '__call__'):  # If maximum is a callable
-                            maximum = maximum()
-                    except:
-                        maximum = None
-                    
                     signals_data.append({
                         'name': sig.name,
-                        'start_bit': getattr(sig, 'start', 0),
-                        'length': getattr(sig, 'length', 1),
-                        'is_signed': getattr(sig, 'is_signed', False),
-                        'scale': scale,
-                        'offset': offset,
-                        'minimum': minimum,
-                        'maximum': maximum,
-                        'unit': getattr(sig, 'unit', '') or '',
-                        'receivers': [str(r) for r in getattr(sig, 'receivers', [])],
+                        'start_bit': self._safe_get_value(sig, 'start', 0),
+                        'length': self._safe_get_value(sig, 'length', 1),
+                        'byte_order': self._safe_get_value(sig, 'byte_order', 'little_endian'),
+                        'is_signed': self._safe_get_value(sig, 'is_signed', False),
+                        'raw_initial': self._safe_get_value(sig, 'raw_initial', None),
+                        'raw_invalid': self._safe_get_value(sig, 'raw_invalid', None),
+                        'scale': self._safe_get_value(sig, 'scale', 1.0),
+                        'offset': self._safe_get_value(sig, 'offset', 0.0),
+                        'minimum': self._safe_get_value(sig, 'minimum', None),
+                        'maximum': self._safe_get_value(sig, 'maximum', None),
+                        'unit': self._safe_get_value(sig, 'unit', '') or '',
+                        'receivers': [str(r) for r in self._safe_get_value(sig, 'receivers', []) or []],
+                        'is_multiplexer': self._safe_get_value(sig, 'is_multiplexer', False),
+                        'multiplexer_ids': list(self._safe_get_value(sig, 'multiplexer_ids', []) or []),
+                        'multiplexer_signal': self._safe_get_value(sig, 'multiplexer_signal', None),
+                        'spn': self._safe_get_value(sig, 'spn', None),
+                        'choices': copy.deepcopy(self._safe_get_value(sig, 'choices', None)),
+                        'is_float': self._safe_get_value(sig, 'is_float', False),
                         'comments': self._extract_comment_text(getattr(sig, 'comments', '')) if getattr(sig, 'comments', '') else ''
                     })
-                
+
                 messages_data.append({
                     'name': msg.name,
                     'frame_id': msg.frame_id,
+                    'is_extended_frame': self._safe_get_value(msg, 'is_extended_frame', msg.frame_id > 0x7FF),
                     'length': msg.length,
-                    'senders': [str(s) for s in msg.senders],
+                    'senders': [str(s) for s in self._safe_get_value(msg, 'senders', []) or []],
+                    'send_type': self._safe_get_value(msg, 'send_type', None),
+                    'cycle_time': self._safe_get_value(msg, 'cycle_time', None),
+                    'is_fd': self._safe_get_value(msg, 'is_fd', False),
+                    'bus_name': self._safe_get_value(msg, 'bus_name', None),
+                    'protocol': self._safe_get_value(msg, 'protocol', None),
+                    'unused_bit_pattern': self._safe_get_value(msg, 'unused_bit_pattern', 0),
                     'signals': signals_data,
                     'comments': self._extract_comment_text(msg.comment) if msg.comment else ''
                 })
-            
+
             self._original_data = {'messages': messages_data}
-            # Create a proper deep copy for modified data
-            self._modified_data = {
-                'messages': [
-                    {
-                        'name': msg['name'],
-                        'frame_id': msg['frame_id'],
-                        'length': msg['length'],
-                        'senders': msg['senders'].copy(),
-                        'signals': [
-                            {
-                                'name': sig['name'],
-                                'start_bit': sig['start_bit'],
-                                'length': sig['length'],
-                                'is_signed': sig['is_signed'],
-                                'scale': sig['scale'],
-                                'offset': sig['offset'],
-                                'minimum': sig['minimum'],
-                                'maximum': sig['maximum'],
-                                'unit': sig['unit'],
-                                'receivers': sig['receivers'].copy(),
-                                'comments': sig['comments']
-                            }
-                            for sig in msg['signals']
-                        ],
-                        'comments': msg['comments']
-                    }
-                    for msg in messages_data
-                ]
-            }
+            self._modified_data = self._clone_data(self._original_data)
             
             # Verify the copy is independent
             logger.info(f"Original data has {len(self._original_data['messages'])} messages")
@@ -176,14 +157,7 @@ class DBCEditor:
         if not self._modified_data or idx < 0 or idx >= len(self._modified_data['messages']):
             raise DBCEditorError("Invalid message index")
         original = self._modified_data['messages'][idx]
-        new_message = {
-            'name': original['name'],
-            'frame_id': original['frame_id'],
-            'length': original['length'],
-            'senders': list(original.get('senders', [])),
-            'signals': [dict(sig) for sig in original.get('signals', [])],
-            'comments': original.get('comments', '')
-        }
+        new_message = copy.deepcopy(original)
         # Ensure unique name by appending "_1", "_2", etc.
         base_name = original['name']
         candidate = f"{base_name}_1"
@@ -248,7 +222,7 @@ class DBCEditor:
         if sig_idx < 0 or sig_idx >= len(signals):
             raise DBCEditorError("Invalid signal index")
         original = signals[sig_idx]
-        new_signal = dict(original)
+        new_signal = copy.deepcopy(original)
         # Ensure unique name by appending "_1", "_2", etc.
         base_name = original['name']
         candidate = f"{base_name}_1"
@@ -315,57 +289,13 @@ class DBCEditor:
                 shutil.copy2(file_path, backup_path)
                 logger.info(f"Created backup: {backup_path}")
             
-            # Rebuild cantools database from modified data
-            db = cantools.database.Database()
-            
-            for msg in self._modified_data['messages']:
-                signals = []
-                for sig in msg['signals']:
-                    # Create signal with safe property access
-                    signal = cantools.database.can.Signal(
-                        name=sig['name'],
-                        start=sig['start_bit'],
-                        length=sig['length'],
-                        is_signed=sig['is_signed'],
-                        receivers=sig['receivers']
-                    )
-                    
-                    # Set additional properties after creation
-                    signal.scale = sig['scale']
-                    signal.offset = sig['offset']
-                    # Handle None values for minimum and maximum
-                    signal.minimum = sig['minimum'] if sig['minimum'] is not None else None
-                    signal.maximum = sig['maximum'] if sig['maximum'] is not None else None
-                    signal.unit = sig['unit']
-                    
-                    # Set comment if available
-                    if sig.get('comments'):
-                        signal.comment = sig['comments']
-                    
-                    signals.append(signal)
-                
-                # Create message
-                message = cantools.database.can.Message(
-                    frame_id=msg['frame_id'],
-                    name=msg['name'],
-                    length=msg['length'],
-                    senders=msg['senders'],
-                    signals=signals,
-                    is_extended_frame=msg['frame_id'] > 0x7FF  # Use extended frame for IDs > 11 bits
-                )
-                
-                # Set comment if available
-                if msg.get('comments'):
-                    message.comment = msg['comments']
-                
-                db.messages.append(message)
-            
-            # Write to file
+            dbc_text = build_dbc_string(self._modified_data)
+
             with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(db.as_dbc_string())
+                f.write(dbc_text)
             
             # Update original data to reflect saved state
-            self._original_data = {'messages': [dict(m) for m in self._modified_data['messages']]}
+            self._original_data = self._clone_data(self._modified_data)
             
             # Clean up backup file after successful save
             self._cleanup_backup_file(file_path)
@@ -375,6 +305,40 @@ class DBCEditor:
         except Exception as e:
             logger.error(f"Failed to save DBC: {e}")
             raise DBCEditorError(f"Failed to save DBC: {e}")
+
+    def save_dbc_text(self, dbc_text: str, file_path: Optional[str] = None) -> None:
+        """Validate and save raw DBC text, then reload it into the editor model."""
+        try:
+            if file_path is None:
+                file_path = self.file_path
+            if not file_path:
+                raise DBCEditorError("No file path specified for saving")
+
+            try:
+                cantools.database.load_string(dbc_text, database_format="dbc", strict=True)
+            except cantools.database.errors.Error as exc:
+                if "are overlapping in message" in str(exc):
+                    cantools.database.load_string(dbc_text, database_format="dbc", strict=False)
+                else:
+                    raise
+
+            if os.path.exists(file_path):
+                backup_path = file_path + '.backup'
+                shutil.copy2(file_path, backup_path)
+                logger.info(f"Created backup: {backup_path}")
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(dbc_text)
+
+            # Reload the saved file so the editor state matches the persisted text.
+            self.load_dbc_file(file_path)
+            self._cleanup_backup_file(file_path)
+
+            logger.info(f"Saved raw DBC text to: {file_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to save raw DBC text: {e}")
+            raise DBCEditorError(f"Failed to save raw DBC text: {e}")
 
     def has_changes(self) -> bool:
         """Improved change detection using deep comparison."""
@@ -526,7 +490,7 @@ class DBCEditor:
     def reset_changes(self) -> None:
         """Reset all changes back to the original state."""
         if self._original_data:
-            self._modified_data = {'messages': [dict(m) for m in self._original_data['messages']]}
+            self._modified_data = self._clone_data(self._original_data)
 
     def _cleanup_backup_file(self, file_path: str) -> None:
         """Delete the backup file for the given DBC file."""
