@@ -116,22 +116,30 @@ def build_dbc_string(data: Dict[str, Any]) -> str:
             )
             signals.append(signal)
 
-        message = cantools.database.can.Message(
-            frame_id=msg["frame_id"],
-            name=msg["name"],
-            length=msg["length"],
-            signals=signals,
-            comment=msg.get("comments") or None,
-            senders=msg.get("senders", []),
-            send_type=msg.get("send_type") or None,
-            cycle_time=msg.get("cycle_time"),
-            is_extended_frame=msg.get("is_extended_frame", msg["frame_id"] > 0x7FF),
-            is_fd=msg.get("is_fd", False),
-            bus_name=msg.get("bus_name") or None,
-            unused_bit_pattern=msg.get("unused_bit_pattern", 0),
-            protocol=msg.get("protocol") or None,
-            sort_signals=None,
-        )
+        try:
+            message = cantools.database.can.Message(
+                frame_id=msg["frame_id"],
+                name=msg["name"],
+                length=msg["length"],
+                signals=signals,
+                comment=msg.get("comments") or None,
+                senders=msg.get("senders", []),
+                send_type=msg.get("send_type") or None,
+                cycle_time=msg.get("cycle_time"),
+                is_extended_frame=msg.get("is_extended_frame", msg["frame_id"] > 0x7FF),
+                is_fd=msg.get("is_fd", False),
+                bus_name=msg.get("bus_name") or None,
+                unused_bit_pattern=msg.get("unused_bit_pattern", 0),
+                protocol=msg.get("protocol") or None,
+                sort_signals=None,
+            )
+        except cantools.database.errors.Error as exc:
+            logger.error("Failed to create message '%s': %s", msg.get("name"), exc)
+            return f"""An error happened while building the DBC string. Do not save your changes!
+
+            Failed to create message '{msg.get("name")}': {exc}
+
+            Please check the input data."""
         db.messages.append(message)
 
     return db.as_dbc_string()
