@@ -83,40 +83,63 @@ class DiffResult:
 
 
 def build_dbc_string(data: Dict[str, Any]) -> str:
-    """Convert an editor-format data dict to a DBC text string via cantools."""
+    """Convert an editor-format data dict to a DBC text string via cantools.
+
+    In case of error, it returns the error string.
+
+    :param data: Editor-format DBC data dict.
+    :return: DBC text string or error message.
+    """
     db = cantools.database.Database(sort_signals=None)
+    try:
+        db.messages.extend(validate_dbc_data(data))
+    except ValueError as exc:
+        logger.error("Failed to build DBC string: %s", exc)
+        return f"Failed to build DBC string: {exc}"
 
-    for msg in data.get("messages", []):
-        signals = []
-        for sig in msg.get("signals", []):
-            conversion = BaseConversion.factory(
-                scale=sig.get("scale", 1.0),
-                offset=sig.get("offset", 0.0),
-                choices=sig.get("choices"),
-                is_float=sig.get("is_float", False),
-            )
-            signal = cantools.database.can.Signal(
-                name=sig["name"],
-                start=sig["start_bit"],
-                length=sig["length"],
-                byte_order=sig.get("byte_order", "little_endian"),
-                is_signed=sig["is_signed"],
-                raw_initial=sig.get("raw_initial"),
-                raw_invalid=sig.get("raw_invalid"),
-                conversion=conversion,
-                minimum=sig["minimum"] if sig.get("minimum") is not None else None,
-                maximum=sig["maximum"] if sig.get("maximum") is not None else None,
-                unit=sig.get("unit") or None,
-                comment=sig.get("comments") or None,
-                receivers=sig.get("receivers", []),
-                is_multiplexer=sig.get("is_multiplexer", False),
-                multiplexer_ids=sig.get("multiplexer_ids") or None,
-                multiplexer_signal=sig.get("multiplexer_signal") or None,
-                spn=sig.get("spn"),
-            )
-            signals.append(signal)
+    return db.as_dbc_string()
 
-        try:
+
+def validate_dbc_data(data: Dict[str, Any]) -> list[cantools.database.can.Message]:
+    """Validate that the provided data dict can be converted to a cantools Message object.
+
+    :param data: Editor-format DBC data dict.
+    :raises ValueError: If the data cannot be converted to a valid DBC structure.
+    :return: List of cantools.database.can.Message objects.
+    """
+
+    messages = []
+    try:
+        for msg in data.get("messages", []):
+            signals = []
+            for sig in msg.get("signals", []):
+                conversion = BaseConversion.factory(
+                    scale=sig.get("scale", 1.0),
+                    offset=sig.get("offset", 0.0),
+                    choices=sig.get("choices"),
+                    is_float=sig.get("is_float", False),
+                )
+                signal = cantools.database.can.Signal(
+                    name=sig["name"],
+                    start=sig["start_bit"],
+                    length=sig["length"],
+                    byte_order=sig.get("byte_order", "little_endian"),
+                    is_signed=sig["is_signed"],
+                    raw_initial=sig.get("raw_initial"),
+                    raw_invalid=sig.get("raw_invalid"),
+                    conversion=conversion,
+                    minimum=sig["minimum"] if sig.get("minimum") is not None else None,
+                    maximum=sig["maximum"] if sig.get("maximum") is not None else None,
+                    unit=sig.get("unit") or None,
+                    comment=sig.get("comments") or None,
+                    receivers=sig.get("receivers", []),
+                    is_multiplexer=sig.get("is_multiplexer", False),
+                    multiplexer_ids=sig.get("multiplexer_ids") or None,
+                    multiplexer_signal=sig.get("multiplexer_signal") or None,
+                    spn=sig.get("spn"),
+                )
+                signals.append(signal)
+
             message = cantools.database.can.Message(
                 frame_id=msg["frame_id"],
                 name=msg["name"],
@@ -133,16 +156,11 @@ def build_dbc_string(data: Dict[str, Any]) -> str:
                 protocol=msg.get("protocol") or None,
                 sort_signals=None,
             )
-        except cantools.database.errors.Error as exc:
-            logger.error("Failed to create message '%s': %s", msg.get("name"), exc)
-            return f"""An error happened while building the DBC string. Do not save your changes!
-
-            Failed to create message '{msg.get("name")}': {exc}
-
-            Please check the input data."""
-        db.messages.append(message)
-
-    return db.as_dbc_string()
+            messages.append(message)
+    except cantools.database.errors.Error as exc:
+        logger.error("Failed to validate DBC data: %s", exc)
+        raise ValueError(exc)
+    return messages
 
 
 def _normalize_line(line: str, ignore_whitespace: bool) -> str:
