@@ -23,7 +23,7 @@ from multiplex_support import (
     is_message_multiplexed,
 )
 from search_module import UnifiedSearchWidget
-
+from src.dbc_comparator import validate_dbc_data
 
 
 def _format_optional_value(value: Any) -> str:
@@ -2202,6 +2202,12 @@ class DBCEditorWidget(QtWidgets.QWidget):
             self.save_as()
             return
 
+        try:
+            validate_dbc_data(self.dbc_editor._modified_data)
+        except ValueError as exc:
+            self._show_error(f"{str(exc)}")
+            return
+
         if self.dbc_editor.has_changes():
             self.saveReviewRequested.emit(
                 self.dbc_editor._original_data,
@@ -2248,6 +2254,12 @@ class DBCEditorWidget(QtWidgets.QWidget):
     def save_as(self):
         """Save changes to a new file with error handling."""
         try:
+            validate_dbc_data(self.dbc_editor._modified_data)
+        except ValueError as exc:
+            self._show_error(f"{str(exc)}")
+            return
+
+        try:
             file_path, _ = QtWidgets.QFileDialog.getSaveFileName(
                 self, "Save DBC File As", "", "DBC Files (*.dbc);;All Files (*)"
             )
@@ -2271,4 +2283,4 @@ class DBCEditorWidget(QtWidgets.QWidget):
 
     def _show_error(self, message):
         QtWidgets.QMessageBox.critical(self, "Error", message)
-        self.status_label.setText(f"<font color='red'>{message}</font>") 
+        self.status_label.setText(f"<font color='red'>{message}</font>")
