@@ -66,7 +66,7 @@ def get_system_info():
 def get_linux_distribution():
     """Get Linux distribution information"""
     try:
-        with open('/etc/os-release', 'r') as f:
+        with open('/etc/os-release', 'r', encoding='utf-8') as f:
             lines = f.readlines()
             for line in lines:
                 if line.startswith('PRETTY_NAME='):
@@ -75,7 +75,7 @@ def get_linux_distribution():
         pass
     
     try:
-        with open('/etc/lsb-release', 'r') as f:
+        with open('/etc/lsb-release', 'r', encoding='utf-8') as f:
             lines = f.readlines()
             for line in lines:
                 if line.startswith('DISTRIB_DESCRIPTION='):
@@ -195,7 +195,7 @@ exec "$EXECUTABLE" "$@"
 """
     
     launcher_path = dist_dir / "launch-dbc-utility.sh"
-    with open(launcher_path, 'w') as f:
+    with open(launcher_path, 'w', encoding='utf-8') as f:
         f.write(launcher_content)
     
     # Make launcher executable
@@ -219,7 +219,7 @@ StartupWMClass=DBCUtility
 """
     
     desktop_path = dist_dir / "DBCUtility.desktop"
-    with open(desktop_path, 'w') as f:
+    with open(desktop_path, 'w', encoding='utf-8') as f:
         f.write(desktop_content)
     print(f"✓ Created desktop entry: {desktop_path}")
 
@@ -288,7 +288,7 @@ echo "To uninstall, run: $INSTALL_DIR/uninstall.sh"
 """
     
     install_path = dist_dir / "install.sh"
-    with open(install_path, 'w') as f:
+    with open(install_path, 'w', encoding='utf-8') as f:
         f.write(install_content)
     
     os.chmod(install_path, 0o755)
@@ -328,7 +328,7 @@ echo "✓ DBC Utility uninstalled successfully!"
 """
     
     uninstall_path = dist_dir / "uninstall.sh"
-    with open(uninstall_path, 'w') as f:
+    with open(uninstall_path, 'w', encoding='utf-8') as f:
         f.write(uninstall_content)
     
     os.chmod(uninstall_path, 0o755)
@@ -399,7 +399,7 @@ For issues and support, please refer to the main README.md file.
 """
     
     readme_path = dist_dir / "README-Linux.md"
-    with open(readme_path, 'w') as f:
+    with open(readme_path, 'w', encoding='utf-8') as f:
         f.write(readme_content)
     print(f"✓ Created Linux README: {readme_path}")
 
