@@ -18,6 +18,11 @@ class UnifiedSearchWidget(QtWidgets.QWidget):
         """
         super().__init__(parent)
         self.mode = mode
+        # Debounce search input so filtering only runs once typing pauses.
+        self._search_timer = QtCore.QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(200)
+        self._search_timer.timeout.connect(self._on_search_changed)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -30,7 +35,7 @@ class UnifiedSearchWidget(QtWidgets.QWidget):
         self.search_label = QtWidgets.QLabel("Search:")
         self.search_edit = QtWidgets.QLineEdit()
         self.search_edit.setPlaceholderText("Search...")
-        self.search_edit.textChanged.connect(self._on_search_changed)
+        self.search_edit.textChanged.connect(self._schedule_search_changed)
 
         search_layout.addWidget(self.search_label)
         search_layout.addWidget(self.search_edit)
@@ -73,6 +78,10 @@ class UnifiedSearchWidget(QtWidgets.QWidget):
         self.frame_filter_combo.currentTextChanged.connect(self._on_filter_changed)
         search_layout.addWidget(self.frame_filter_combo)
         layout.addLayout(search_layout)
+
+    def _schedule_search_changed(self):
+        """Restart the debounce timer; emit once the user pauses typing."""
+        self._search_timer.start()
 
     def _on_search_changed(self):
         try:
