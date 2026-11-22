@@ -266,6 +266,8 @@ class ConverterWindow(QtWidgets.QWidget):
         super().__init__(parent)
         self.dbc_processor = DBCProcessor()
         self._full_data = []
+        self._tree_built = False
+        self._tree_index = []
         self._setup_ui()
 
     def _setup_ui(self):
@@ -380,7 +382,7 @@ class ConverterWindow(QtWidgets.QWidget):
 
         self.tree_widget = QtWidgets.QTreeWidget()
         self.tree_widget.setHeaderLabels(["Key", "Value", "Type"])
-        self.tree_widget.header().setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        self.tree_widget.header().setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
         self.tree_widget.setAlternatingRowColors(True)
         left_v_layout.addWidget(self.tree_widget)
         main_h_layout.addLayout(left_v_layout, 2)
@@ -473,6 +475,7 @@ class ConverterWindow(QtWidgets.QWidget):
         self.viewer_mux_filter_combo.hide()
         self.dbc_processor._extracted_data = []
         self._full_data = []
+        self._tree_built = False
         # Clear file info panel
         self.info_node_count.setText("Nodes: —")
         self.info_message_count.setText("Messages: —")
@@ -489,6 +492,7 @@ class ConverterWindow(QtWidgets.QWidget):
             self.message_label.setText("Loading DBC file and extracting data...")
             self._full_data = self.dbc_processor.load_dbc_file(self.dbc_path)
             self._update_viewer_mux_filter()
+            self._tree_built = False
             self._apply_filter_to_tree()
             self._update_file_info()
             self.message_label.setText("DBC file loaded successfully")
@@ -531,45 +535,59 @@ class ConverterWindow(QtWidgets.QWidget):
             if not self._full_data:
                 self._populate_tree_widget([])
                 return
-            search_query_lower = search_query.lower().strip()
-            filtered_results = []
-            if not search_query_lower and filter_type == "all":
-                filtered_results = list(self._full_data)
-            else:
-                for msg_data in self._full_data:
-                    message_matches = False
-                    signals_matching = []
-                    if filter_type == "all" or filter_type == "message":
-                        if search_query_lower in msg_data["message_name"].lower():
-                            message_matches = True
-                    if filter_type == "all" or filter_type == "frame_id":
-                        if search_query_lower in str(hex(msg_data["frame_id"])).lower() or \
-                           search_query_lower in str(msg_data["frame_id"]).lower():
-                            message_matches = True
-                    for sig_data in msg_data["signals"]:
-                        signal_level_match = False
-                        if filter_type == "all" or filter_type == "signal":
-                            if (search_query_lower in sig_data["signal_name"].lower() or
-                                search_query_lower in sig_data["comments"].lower() or
-                                search_query_lower in ",".join(sig_data["receivers"]).lower() or
-                                search_query_lower in str(sig_data.get("minimum", "")).lower() or
-                                search_query_lower in str(sig_data.get("maximum", "")).lower()):
-                                signal_level_match = True
-                        if filter_type == "frame_id" and (search_query_lower in str(hex(msg_data["frame_id"])).lower() or \
-                                                          search_query_lower in str(msg_data["frame_id"]).lower()):
-                            if not search_query_lower or signal_level_match:
-                                signals_matching.append(sig_data)
-                        elif signal_level_match:
-                            signals_matching.append(sig_data)
-                    if message_matches:
-                        filtered_results.append(msg_data)
-                    elif signals_matching:
-                        temp_msg_data = msg_data.copy()
-                        temp_msg_data["signals"] = signals_matching
-                        filtered_results.append(temp_msg_data)
-            self._populate_tree_widget(filtered_results)
+            # The tree holds the full data and only visibility is toggled, so a
+            # search no longer rebuilds (and re-layouts) every item.
+            if not self._tree_built:
+                self._populate_tree_widget(self._full_data)
+            self._filter_tree_in_place(search_query, filter_type)
         except Exception as e:
             self._show_error(f"Error filtering data: {e}")
+
+    def _filter_tree_in_place(self, search_query, filter_type):
+        """Show/hide existing tree items instead of rebuilding the tree."""
+        query = search_query.lower().strip()
+        for msg_item, msg_data, signal_items in self._tree_index:
+            if not query:
+                message_matches = True
+            else:
+                message_matches = False
+                if filter_type in ("all", "message"):
+                    message_matches = query in msg_data["message_name"].lower()
+                if filter_type in ("all", "frame_id"):
+                    frame_id = msg_data["frame_id"]
+                    message_matches = message_matches or (
+                        query in str(hex(frame_id)).lower()
+                        or query in str(frame_id).lower()
+                    )
+
+            if message_matches:
+                if msg_item.isHidden():
+                    msg_item.setHidden(False)
+                for sig_item, _ in signal_items:
+                    if sig_item.isHidden():
+                        sig_item.setHidden(False)
+                continue
+
+            any_match = False
+            for sig_item, sig_data in signal_items:
+                sig_match = self._signal_matches(sig_data, query, filter_type)
+                if sig_item.isHidden() == sig_match:
+                    sig_item.setHidden(not sig_match)
+                any_match = any_match or sig_match
+            if msg_item.isHidden() == any_match:
+                msg_item.setHidden(not any_match)
+
+    @staticmethod
+    def _signal_matches(sig_data, query, filter_type):
+        if filter_type not in ("all", "signal"):
+            return False
+        return (
+            query in sig_data["signal_name"].lower()
+            or query in sig_data["comments"].lower()
+            or query in ",".join(sig_data["receivers"]).lower()
+            or query in str(sig_data.get("minimum", "")).lower()
+            or query in str(sig_data.get("maximum", "")).lower()
+        )
 
     # -- Collapse / Expand ----------------------------------------------------
 
@@ -633,6 +651,8 @@ class ConverterWindow(QtWidgets.QWidget):
         self.viewer_mux_filter_combo.blockSignals(False)
 
     def _on_viewer_mux_filter_changed(self) -> None:
+        # The mux filter changes which signal items exist, so a rebuild is needed.
+        self._tree_built = False
         self._apply_filter_to_tree(
             self.search_widget.search_edit.text(),
             self._get_current_view_filter_type(),
@@ -835,6 +855,8 @@ class ConverterWindow(QtWidgets.QWidget):
             if mux_sig:
                 self._tree_add_row(mux_group, "Multiplexer Signal", mux_sig, "str")
 
+        return sig_item
+
     def _populate_tree_widget(self, data):
         """
         Populate the tree widget with message and signal data.
@@ -842,6 +864,8 @@ class ConverterWindow(QtWidgets.QWidget):
         Ungrouped signals are displayed separately.
         """
         self.tree_widget.clear()
+        self._tree_built = False
+        self._tree_index = []
         if not data:
             QtWidgets.QTreeWidgetItem(self.tree_widget).setText(0, "No matching data found.")
             return
@@ -853,6 +877,7 @@ class ConverterWindow(QtWidgets.QWidget):
         )
 
         for msg_data in data:
+            msg_signal_items = []
             msg_item = QtWidgets.QTreeWidgetItem(self.tree_widget)
             msg_item.setText(0, msg_data["message_name"])
 
@@ -903,7 +928,7 @@ class ConverterWindow(QtWidgets.QWidget):
                         sig_data = signals_by_name.get(sig_name)
                         if sig_data:
                             signals_added_to_groups.add(sig_name)
-                            self._add_signal_to_tree(group_item, sig_data)
+                            msg_signal_items.append((self._add_signal_to_tree(group_item, sig_data), sig_data))
 
             # Ungrouped signals (or all signals if no groups)
             ungrouped = [sig for sig in signals if sig["signal_name"] not in signals_added_to_groups]
@@ -927,25 +952,31 @@ class ConverterWindow(QtWidgets.QWidget):
                 if muxer:
                     muxer_group = self._tree_add_group(root, "Multiplexer", "Collection")
                     for sig_data in muxer:
-                        self._add_signal_to_tree(muxer_group, sig_data)
+                        msg_signal_items.append((self._add_signal_to_tree(muxer_group, sig_data), sig_data))
                 if regular:
                     reg_group = self._tree_add_group(root, "Regular Signals", "Collection")
                     for sig_data in regular:
-                        self._add_signal_to_tree(reg_group, sig_data)
+                        msg_signal_items.append((self._add_signal_to_tree(reg_group, sig_data), sig_data))
                 for mid in sorted(muxed_by_id):
                     label = format_mux_id_with_name(msg_data, mid)
                     mid_group = self._tree_add_group(root, f"Mux ID: {label}", "Collection")
                     for sig_data in muxed_by_id[mid]:
-                        self._add_signal_to_tree(mid_group, sig_data)
+                        msg_signal_items.append((self._add_signal_to_tree(mid_group, sig_data), sig_data))
             elif ungrouped:
                 title = "Ungrouped Signals" if signal_groups else "Signals"
                 root = self._tree_add_group(msg_item, title, "Collection")
                 for sig_data in ungrouped:
-                    self._add_signal_to_tree(root, sig_data)
+                    msg_signal_items.append((self._add_signal_to_tree(root, sig_data), sig_data))
+
+            self._tree_index.append((msg_item, msg_data, msg_signal_items))
 
         self._collapse_all()
         self._viewer_tree_fully_expanded = False
         self._update_expand_collapse_button()
+        self._tree_built = True
+        # Size columns once per rebuild rather than on every item insertion.
+        for column in range(self.tree_widget.columnCount()):
+            self.tree_widget.resizeColumnToContents(column)
 
     def display_item_details(self, item, column):
         try:

@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 5
 requires-python = ">=3.9"
 
 [manifest]
@@ -119,12 +119,13 @@ wheels = [
 
 [[package]]
 name = "dbc-utility"
-version = "1.0.2"
+version = "1.0.3"
 source = { editable = "." }
 dependencies = [
     { name = "cantools" },
     { name = "pyinstaller" },
     { name = "pyqt5" },
+    { name = "qtawesome" },
 ]
 
 [package.metadata]
@@ -132,6 +133,7 @@ requires-dist = [
     { name = "cantools", specifier = ">=40.0.0" },
     { name = "pyinstaller", specifier = ">=5.0.0" },
     { name = "pyqt5", specifier = ">=5.15.2" },
+    { name = "qtawesome", specifier = ">=1.4.1" },
 ]
 provides-extras = ["dev"]
 
@@ -313,6 +315,30 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/85/9f/01a1a99704853cb63f253eea009390c88e7131c67e66a0a02099a8c917cb/pywin32-ctypes-0.2.3.tar.gz", hash = "sha256:d162dc04946d704503b2edc4d55f3dba5c1d539ead017afa00142c38b9885755", size = 29471, upload-time = "2024-08-14T10:15:34.626Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/de/3d/8161f7711c017e01ac9f008dfddd9410dff3674334c233bde66e7ba65bbf/pywin32_ctypes-0.2.3-py3-none-any.whl", hash = "sha256:8a1513379d709975552d202d942d9837758905c8d01eb82b8bcc30918929e7b8", size = 30756, upload-time = "2024-08-14T10:15:33.187Z" },
+]
+
+[[package]]
+name = "qtawesome"
+version = "1.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "qtpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cf/bc/475c8df94de4f358bbf7703747c13b16ae3c0c4cda50d5243b99cb45e2a8/qtawesome-1.4.2.tar.gz", hash = "sha256:b2bf9351beb335095006892796f072ffd9755a2d7e5113dc71918dcd9ba4ef4a", size = 2614207, upload-time = "2026-04-10T18:49:46.037Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/25/b1/da1d826ccc9258674b26dd0abcbbb1c55cab06e7fbf2697518b67edc79fc/qtawesome-1.4.2-py3-none-any.whl", hash = "sha256:dbf08524428fa2df73918ce362153254cd44f089380576d84bfaad8f40eece45", size = 2593557, upload-time = "2026-04-10T18:49:44.219Z" },
+]
+
+[[package]]
+name = "qtpy"
+version = "2.4.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/70/01/392eba83c8e47b946b929d7c46e0f04b35e9671f8bb6fc36b6f7945b4de8/qtpy-2.4.3.tar.gz", hash = "sha256:db744f7832e6d3da90568ba6ccbca3ee2b3b4a890c3d6fbbc63142f6e4cdf5bb", size = 66982, upload-time = "2025-02-11T15:09:25.759Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/76/37c0ccd5ab968a6a438f9c623aeecc84c202ab2fabc6a8fd927580c15b5a/QtPy-2.4.3-py3-none-any.whl", hash = "sha256:72095afe13673e017946cc258b8d5da43314197b741ed2890e563cf384b51aa1", size = 95045, upload-time = "2025-02-11T15:09:24.162Z" },
 ]
 
 [[package]]
